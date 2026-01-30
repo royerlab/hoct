@@ -4,8 +4,7 @@ import polars as pl
 import pytest
 import tracksdata as td
 
-from eet_inference.tracking._solver import solve_tracking
-from eet_inference.tracking._tracklet_solver import TrackletSolver
+from eet_inference.tracking import ILPSolverConfig, TrackletSolver, solve_tracking
 from eet_inference._tests.conftest import GEFF_2D, GEFF_3D
 
 
@@ -55,8 +54,7 @@ class TestSolveTracking:
         graph = prepare_graph_for_tracking(graph)
 
         # Solve tracking with basic ILP solver
-        solution = solve_tracking(
-            graph=graph,
+        config = ILPSolverConfig(
             appearance_weight=1.0,
             disappearance_weight=1.0,
             division_weight=1.0,
@@ -66,6 +64,7 @@ class TestSolveTracking:
             timeout=10.0,
             tracklet_solver=False,
         )
+        solution = solve_tracking(graph=graph, config=config)
 
         # Solution should be a graph
         assert isinstance(solution, td.graph.BaseGraph)
@@ -81,8 +80,7 @@ class TestSolveTracking:
         graph = prepare_graph_for_tracking(graph)
 
         # Solve tracking with tracklet solver
-        solution = solve_tracking(
-            graph=graph,
+        config = ILPSolverConfig(
             appearance_weight=1.0,
             disappearance_weight=1.0,
             division_weight=1.0,
@@ -92,6 +90,7 @@ class TestSolveTracking:
             timeout=10.0,
             tracklet_solver=True,
         )
+        solution = solve_tracking(graph=graph, config=config)
 
         # Solution should be a graph
         assert isinstance(solution, td.graph.BaseGraph)
@@ -115,8 +114,7 @@ class TestSolveTracking:
         graph.update_edge_attrs(attrs={td.DEFAULT_ATTR_KEYS.SOLUTION: True})
 
         # Solve tracking
-        solution = solve_tracking(
-            graph=graph,
+        config = ILPSolverConfig(
             appearance_weight=1.0,
             disappearance_weight=1.0,
             division_weight=1.0,
@@ -126,6 +124,7 @@ class TestSolveTracking:
             timeout=10.0,
             tracklet_solver=False,
         )
+        solution = solve_tracking(graph=graph, config=config)
 
         # Solution should have been recomputed successfully
         # Verify that solution attributes exist and are valid
@@ -153,8 +152,7 @@ class TestSolveTracking:
         metadata["no_division"] = True
 
         # Solve tracking
-        solution = solve_tracking(
-            graph=graph,
+        config = ILPSolverConfig(
             appearance_weight=1.0,
             disappearance_weight=1.0,
             division_weight=1.0,  # Should be overridden by metadata
@@ -164,6 +162,7 @@ class TestSolveTracking:
             timeout=10.0,
             tracklet_solver=False,
         )
+        solution = solve_tracking(graph=graph, config=config)
 
         assert isinstance(solution, td.graph.BaseGraph)
 
@@ -175,8 +174,7 @@ class TestSolveTracking:
         graph2 = prepare_graph_for_tracking(graph2)
 
         # Solve with different appearance weights
-        sol1 = solve_tracking(
-            graph=graph1,
+        config1 = ILPSolverConfig(
             appearance_weight=0.1,
             disappearance_weight=1.0,
             division_weight=1.0,
@@ -186,9 +184,9 @@ class TestSolveTracking:
             timeout=10.0,
             tracklet_solver=False,
         )
+        sol1 = solve_tracking(graph=graph1, config=config1)
 
-        sol2 = solve_tracking(
-            graph=graph2,
+        config2 = ILPSolverConfig(
             appearance_weight=10.0,
             disappearance_weight=1.0,
             division_weight=1.0,
@@ -198,6 +196,7 @@ class TestSolveTracking:
             timeout=10.0,
             tracklet_solver=False,
         )
+        sol2 = solve_tracking(graph=graph2, config=config2)
 
         # Solutions should potentially differ (but both valid)
         assert isinstance(sol1, td.graph.BaseGraph)
@@ -244,8 +243,7 @@ class TestTrackletSolver:
         graph = prepare_graph_for_tracking(graph)
 
         # First solve with basic ILP to get initial solution
-        graph = solve_tracking(
-            graph=graph,
+        config = ILPSolverConfig(
             appearance_weight=1.0,
             disappearance_weight=1.0,
             division_weight=1.0,
@@ -255,6 +253,7 @@ class TestTrackletSolver:
             timeout=10.0,
             tracklet_solver=False,
         )
+        graph = solve_tracking(graph=graph, config=config)
 
         # Now solve with tracklet solver
         solver = TrackletSolver(

@@ -1,29 +1,174 @@
 """Command-line interface for eet-inference."""
 
-import argparse
+from pathlib import Path
+from typing import Optional
+
+import torch
+import typer
+import yaml
+from rich.console import Console
+from rich.panel import Panel
 
 from eet_inference import __version__
+from eet_inference.data import FrameDataset
+from eet_inference.inference import model_predict
+from eet_inference.tracking import ILPSolverConfig
+
+app = typer.Typer(
+    name="eet-inference",
+    help="Inference CLI for Edge Embedding Tracking (EET) model",
+    add_completion=False,
+)
+console = Console()
 
 
-def main():
-    """Main entry point for the CLI."""
-    parser = argparse.ArgumentParser(
-        description="Inference CLI for Edge Embedding Tracking (EET) model",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
+def version_callback(value: bool):
+    """Print version and exit."""
+    if value:
+        console.print(f"eet-inference version: {__version__}")
+        raise typer.Exit()
+
+
+@app.command()
+def predict(
+    geff_path: Path = typer.Argument(..., help="Path to GEFF file", exists=True, dir_okay=False),
+    model_path: Path = typer.Argument(..., help="Path to PyTorch model checkpoint", exists=True, dir_okay=False),
+    config_path: Optional[Path] = typer.Option(
+        None, "--config", "-c", help="Path to ILP solver config YAML file", exists=True, dir_okay=False
+    ),
+    window_size: int = typer.Option(3, "--window", "-w", help="Temporal window size for frame dataset"),
+    output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output GEFF path (default: overwrite input)"),
+    device: str = typer.Option("cuda", "--device", "-d", help="Device to use: 'cuda', 'mps', or 'cpu'"),
+):
+    """
+    Run model prediction and tracking on a GEFF file.
+
+    This command:
+    1. Loads the GEFF graph and model
+    2. Runs edge prediction with the model
+    3. Solves tracking using ILP solver
+    4. Saves the result with solution attributes
+
+    Example:
+        eet-inference predict data.geff model.pt --config solver_config.yaml
+    """
+    console.print(Panel.fit("EET Inference - Model Prediction", style="bold blue"))
+
+    # Load ILP solver config
+    if config_path:
+        console.print(f"Loading solver config from: {config_path}")
+        with open(config_path) as f:
+            config_dict = yaml.safe_load(f)
+        solver_config = ILPSolverConfig(**config_dict)
+    else:
+        console.print("Using default solver configuration")
+        solver_config = ILPSolverConfig()
+
+    console.print(f"Solver config: {solver_config.model_dump()}")
+
+    # Load dataset
+    console.print(f"\nLoading GEFF from: {geff_path}")
+    ds = FrameDataset(graph_path=str(geff_path), window_size=window_size)
+    console.print(f"Dataset: {len(ds.graph.nodes())} nodes, {len(ds.graph.edges())} edges")
+    console.print(f"Time frames: {ds.graph.node_attrs(['t'])['t'].min()} - {ds.graph.node_attrs(['t'])['t'].max()}")
+
+    # Load model
+    console.print(f"\nLoading model from: {model_path}")
+
+    # Determine device
+    if device == "cuda" and not torch.cuda.is_available():
+        console.print("[yellow]Warning: CUDA not available, falling back to CPU[/yellow]")
+        device = "cpu"
+    elif device == "mps" and not torch.backends.mps.is_available():
+        console.print("[yellow]Warning: MPS not available, falling back to CPU[/yellow]")
+        device = "cpu"
+
+    model = torch.jit.load(model_path, map_location=device)
+    model.eval()
+    console.print(f"Model loaded on device: {device}")
+
+    # Run prediction
+    console.print("\n[bold green]Running prediction and tracking...[/bold green]")
+    try:
+        model_predict(model, ds, solver_config=solver_config)
+        console.print("[bold green]✓ Prediction and tracking complete![/bold green]")
+    except Exception as e:
+        console.print(f"[bold red]✗ Error during prediction: {e}[/bold red]")
+        raise typer.Exit(code=1)
+
+    # Save output
+    output_path = output or geff_path
+    console.print(f"\nSaving results to: {output_path}")
+    ds.graph.to_geff(str(output_path))
+    console.print("[bold green]✓ Results saved successfully![/bold green]")
+
+    # Summary
+    solution_nodes = ds.graph.node_attrs(["solution"])["solution"].sum()
+    solution_edges = ds.graph.edge_attrs(["solution"])["solution"].sum()
+    console.print(
+        Panel.fit(
+            f"[bold]Solution Summary[/bold]\n"
+            f"Nodes in solution: {solution_nodes}\n"
+            f"Edges in solution: {solution_edges}",
+            style="green",
+        )
     )
-    parser.add_argument(
-        "--version",
-        action="version",
-        version=f"eet-inference {__version__}",
-    )
 
-    # Add subcommands here as needed
 
-    args = parser.parse_args()
+@app.command()
+def init_config(
+    output: Path = typer.Option("solver_config.yaml", "--output", "-o", help="Output YAML path"),
+):
+    """
+    Generate a template ILP solver configuration YAML file.
 
-    # Placeholder for inference logic
-    print("EET Inference CLI - Model inference interface")
+    Example:
+        eet-inference init-config --output my_config.yaml
+    """
+    console.print(Panel.fit("Generating ILP Solver Config Template", style="bold blue"))
+
+    # Create default config and export to dict
+    default_config = ILPSolverConfig()
+    config_dict = default_config.model_dump()
+
+    # Add comments as a separate structure
+    config_with_comments = {
+        "# Configuration for ILP tracking solver": None,
+        "# Weight for appearance edges (nodes appearing or orphans)": None,
+        "appearance_weight": config_dict["appearance_weight"],
+        "# Weight for disappearance edges": None,
+        "disappearance_weight": config_dict["disappearance_weight"],
+        "# Weight for cell division edges (set to 1e6 to disable divisions)": None,
+        "division_weight": config_dict["division_weight"],
+        "# Weight for node selection": None,
+        "node_weight": config_dict["node_weight"],
+        "# Penalty for edges spanning multiple frames": None,
+        "delta_t_weight": config_dict["delta_t_weight"],
+        "# Bias added to edge weights": None,
+        "edge_bias": config_dict["edge_bias"],
+        "# Solver timeout in seconds": None,
+        "timeout": config_dict["timeout"],
+        "# Use two-pass tracklet solver": None,
+        "tracklet_solver": config_dict["tracklet_solver"],
+    }
+
+    # Write YAML with comments
+    with open(output, "w") as f:
+        yaml.dump(config_dict, f, default_flow_style=False, sort_keys=False)
+
+    console.print(f"[bold green]✓ Config template saved to: {output}[/bold green]")
+    console.print("\nEdit this file to customize solver parameters.")
+
+
+@app.callback()
+def main(
+    version: Optional[bool] = typer.Option(
+        None, "--version", "-v", callback=version_callback, is_eager=True, help="Show version and exit"
+    ),
+):
+    """EET Inference - Command-line interface for Edge Embedding Tracking model inference."""
+    pass
 
 
 if __name__ == "__main__":
-    main()
+    app()

@@ -30,6 +30,10 @@ dependencies = [
     "spatial-graph>=0.0.5",
     "tracksdata",
     "eet-features>=0.1.0",
+    "pydantic>=2.12.5",
+    "pyyaml>=6.0.3",
+    "typer>=0.21.1",
+    "rich>=14.3.1",
 ]
 
 [project.optional-dependencies]
