@@ -107,9 +107,10 @@ def item_from_filter(
         node_attrs = transform(node_attrs)
 
     edge_attrs = sp_filter.edge_attrs()
+    imploded_node_ids = node_attrs[td.DEFAULT_ATTR_KEYS.NODE_ID].implode()
     edge_attrs = edge_attrs.filter(
-        edge_attrs[td.DEFAULT_ATTR_KEYS.EDGE_SOURCE].is_in(node_attrs[td.DEFAULT_ATTR_KEYS.NODE_ID]),
-        edge_attrs[td.DEFAULT_ATTR_KEYS.EDGE_TARGET].is_in(node_attrs[td.DEFAULT_ATTR_KEYS.NODE_ID]),
+        edge_attrs[td.DEFAULT_ATTR_KEYS.EDGE_SOURCE].is_in(imploded_node_ids),
+        edge_attrs[td.DEFAULT_ATTR_KEYS.EDGE_TARGET].is_in(imploded_node_ids),
     )
 
     node_map = {node_id: i for i, node_id in enumerate(node_attrs[td.DEFAULT_ATTR_KEYS.NODE_ID].to_list())}
