@@ -27,6 +27,7 @@ dependencies = [
     "numpy>=1.24.0",
     "torch>=2.0.0",
     "polars>=1.0.0",
+    "spatial-graph>=0.0.5",
     "tracksdata",
     "eet-features>=0.1.0",
 ]
