@@ -8,11 +8,7 @@ from tracksdata.functional import TilingScheme
 
 from eet_inference.data._batching import DataKeys
 from eet_inference.data._tiled_dataset import Tile, TiledRoiDataset
-
-
-# Test data paths
-GEFF_3D = "/hpc/reference/group.royer/geffneration/CTC/Fluo-C3DL-MDA231/01/graph.geff"
-GEFF_2D = "/hpc/reference/group.royer/geffneration/CTC/DIC-C2DH-HeLa/01/graph.geff"
+from eet_inference._tests.conftest import GEFF_2D, GEFF_3D
 
 
 class TestTile:
