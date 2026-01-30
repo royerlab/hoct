@@ -1,0 +1,12 @@
+[project]
+name = "eet-inference"
+version = "0.1.0"
+authors = [
+    { name = "Jordao Bragantini", email = "jordao.bragantini@czbiohub.org" }
+]
+requires-python = ">=3.11"
+dependencies = []
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
