@@ -7,7 +7,7 @@ from eet_inference.data._batching import (
     item_from_filter,
 )
 from eet_inference.data._tiled_dataset import Tile, TiledRoiDataset
-from eet_inference.data.frame_dataset import FrameDataset
+from eet_inference.data._frame_dataset import FrameDataset
 
 __all__ = [
     "DataItem",

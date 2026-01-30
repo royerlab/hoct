@@ -77,9 +77,9 @@ class TestSolverConfig:
 
     def test_config_is_immutable(self):
         """Test that config cannot be modified after creation."""
-        config = ILPSolverConfig()
+        config = ILPSolverConfig.default()
 
-        with pytest.raises(Exception):  # Pydantic ValidationError
+        with pytest.raises(Exception):
             config.appearance_weight = 2.0
 
     def test_config_validates_negative_weights(self):

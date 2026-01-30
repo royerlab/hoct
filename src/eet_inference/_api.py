@@ -176,12 +176,11 @@ def predict(
     inference, which is useful for large volumes that cannot fit in GPU memory at once.
     """
     if solver_config is None:
-        solver_config = ILPSolverConfig()
+        solver_config = ILPSolverConfig.default()
 
     LOG.info("Starting EET prediction pipeline")
 
-    # Step 1: Create candidate tracking graph using eet_features
-    LOG.info("Step 1/3: Creating candidate tracking graph")
+    LOG.info("Creating candidate tracking graph")
     graph = create_graph(
         labels=labels,
         images=images,
@@ -194,20 +193,18 @@ def predict(
 
     LOG.info(f"Created graph with {len(graph.nodes())} nodes and {len(graph.edges())} edges")
 
-    # Step 2: Create dataset (frame-based or tiled)
     if tiling_scheme is not None:
-        LOG.info("Step 2/3: Creating tiled ROI dataset")
+        LOG.info("Creating tiled ROI dataset")
         dataset = TiledRoiDataset(
             graph=graph,
             properties=[],
             tiling_scheme=tiling_scheme,
         )
     else:
-        LOG.info("Step 2/3: Creating frame dataset with window_size=%d", window_size)
+        LOG.info("Creating frame dataset with window_size=%d", window_size)
         dataset = FrameDataset(graph=graph, window_size=window_size)
 
-    # Step 3: Run model prediction and solve tracking
-    LOG.info("Step 3/3: Running model inference and solving tracking")
+    LOG.info("Running model inference and solving tracking")
     model_predict(model, dataset, solver_config=solver_config)
 
     LOG.info("Prediction complete!")

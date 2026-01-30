@@ -59,16 +59,34 @@ class ILPSolverConfig(BaseModel):
     ... )
     """
 
-    appearance_weight: float = Field(default=1.0, ge=0.0, description="Weight for appearance edges")
-    disappearance_weight: float = Field(default=1.0, ge=0.0, description="Weight for disappearance edges")
-    division_weight: float = Field(default=1.0, ge=0.0, description="Weight for division edges")
-    node_weight: float = Field(default=1.0, description="Weight for node selection")
-    delta_t_weight: float = Field(default=0.0, ge=0.0, description="Penalty for edges spanning multiple frames")
-    edge_bias: float = Field(default=0.0, description="Bias added to edge weights")
-    timeout: float = Field(default=600.0, gt=0.0, description="Solver timeout in seconds")
-    tracklet_solver: bool = Field(default=False, description="Use two-pass tracklet solver")
+    appearance_weight: float = Field(description="Weight for appearance edges")
+    disappearance_weight: float = Field(description="Weight for disappearance edges")
+    division_weight: float = Field(description="Weight for division edges")
+    node_weight: float = Field(description="Weight for node selection")
+    delta_t_weight: float = Field(description="Penalty for edges spanning multiple frames")
+    edge_bias: float = Field(description="Bias added to edge weights")
+    timeout: float = Field(600.0, description="Solver timeout in seconds")
+    tracklet_solver: bool = Field(description="Use two-pass tracklet solver")
 
-    model_config = {"frozen": True}  # Make immutable
+    model_config = {
+        "frozen": True,
+        "extra": "forbid",
+        "arbitrary_types_allowed": True,
+    }
+
+
+    @classmethod
+    def default(cls) -> "ILPSolverConfig":
+        return cls(
+            appearance_weight=0.5,
+            delta_t_weight=0.5,
+            disappearance_weight=0.25,
+            division_weight=0.25,
+            edge_bias=0.5,
+            node_weight=0.0,
+            timeout=600.0,
+            tracklet_solver=True,
+        )
 
 
 def solve_tracking(
