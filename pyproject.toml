@@ -26,6 +26,8 @@ classifiers = [
 dependencies = [
     "numpy>=1.24.0",
     "torch>=2.0.0",
+    "polars>=1.0.0",
+    "tracksdata",
     "eet-features>=0.1.0",
 ]
 
@@ -36,6 +38,10 @@ dev = [
     "ruff>=0.1.0",
     "pre-commit>=3.5.0",
 ]
+
+[tool.uv.sources]
+eet-features = { workspace = true }
+tracksdata = { git = "https://github.com/royerlab/tracksdata", rev = "dde23bd8c8668e48f2e75660867c389fad8e2308" }
 
 [project.scripts]
 eet-inference = "eet_inference.cli:main"
