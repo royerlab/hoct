@@ -18,7 +18,6 @@ class FrameDataset(Dataset):
         min_window_size: int | None = None,
         df_transforms: Sequence[Callable[[pl.DataFrame], pl.DataFrame]] = (),
         dict_transforms: Sequence[Callable[[DataItem], DataItem]] = (),
-        path: Path | None = None,
         return_graph: bool = False,
         delete_masks: bool = False,
         name: str = "",
