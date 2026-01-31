@@ -20,12 +20,13 @@ class TestPadTensor:
 
     def test_pad_1d_tensor(self):
         """Test padding 1D tensor."""
-        tensor = torch.tensor([1, 2, 3])
+        tensor = torch.tensor([1, 2, 3], dtype=torch.long)
         padded = _pad_tensor(tensor, n_samples=5)
 
         assert padded.shape == (5,)
         assert torch.equal(padded[:3], tensor)
         assert torch.equal(padded[3:], torch.zeros(2))
+        assert padded.dtype == torch.long
 
     def test_pad_2d_tensor_samples_only(self):
         """Test padding 2D tensor on sample dimension only."""

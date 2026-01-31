@@ -5,8 +5,8 @@ from typing import NamedTuple
 
 import polars as pl
 import torch
+import tracksdata as td
 from torch.utils.data import DataLoader
-from tqdm import tqdm
 
 from eet_inference._logging import LOG
 from eet_inference.data import DataKeys, FrameDataset, TiledRoiDataset
@@ -79,7 +79,7 @@ def model_predict(
     model: EdgeModel,
     ds: FrameDataset | TiledRoiDataset | DataLoader,
     solver_config: ILPSolverConfig | None = None,
-) -> None:
+) -> td.graph.InMemoryGraph:
     """
     Run model prediction on a dataset and solve tracking.
 
@@ -162,14 +162,17 @@ def model_predict(
                 return None
             return tensor.to(device)
 
+    # disabling recompilation
+    torch._C._jit_set_bailout_depth(0)
+
     # Run model inference
     with (
         torch.amp.autocast(device_type=device.type, dtype=torch.bfloat16)
         if torch.cuda.is_available()
         else nullcontext()
     ):
-        for batch in tqdm(_ds_iterator(), desc="Predicting"):
-            input_batch = _expand_dims(batch[DataKeys.INPUT])
+        for batch in _ds_iterator():
+            input_batch = _expand_dims(batch[DataKeys.NODE_FEATS])
             edges = _expand_dims(batch[DataKeys.EDGE_BATCH_ID])
             node_mask = _expand_dims(batch.get(DataKeys.NODE_MASK, None))
             edge_mask = _expand_dims(batch.get(DataKeys.EDGE_MASK, None))
@@ -185,19 +188,8 @@ def model_predict(
             if edge_mask is None:
                 edge_mask = torch.ones(edges.shape[:2], dtype=torch.bool, device=device)
 
-            model_output = model.forward(
-                input_batch,
-                node_pos=node_pos,
-                edge_pos=edge_pos,
-                edge_indices=edges,
-                node_mask=node_mask,
-                edge_mask=edge_mask,
-            )
-            pred = model_output.edge_logits
-            oph_logits = model_output.orphan_logits
-
-            # Apply softmax and extract positive class probability
-            pred = pred.softmax(dim=-1)[..., 1:2]
+            model_output = model.forward(input_batch, node_pos, edge_pos, edges, node_mask, edge_mask)
+            pred, _, _, oph_logits = model_output
 
             if edge_mask is not None:
                 pred = pred[edge_mask]
@@ -278,7 +270,8 @@ def model_predict(
     # Compute orphan probabilities with parental normalization
     denom_df = edge_df.group_by("target_id", "delta_t").agg(pl.col("sim_exp").sum().alias("denom"))
 
-    node_df = node_df.join(denom_df, left_on=DataKeys.NODE_ID, right_on="target_id").fill_null(0.0)
+    node_df = node_df.join(denom_df, left_on=DataKeys.NODE_ID, right_on="target_id")
+    node_df = node_df.with_columns(pl.col(pl.Float64, pl.Float32).fill_null(0.0))
     node_df = node_df.with_columns(
         (pl.col("orphan_exp") / (pl.col("denom") + pl.col("orphan_exp"))).fill_nan(0.0).alias("orphan_prob"),
         (pl.col("delta_t").max().over(DataKeys.NODE_ID) - pl.col("delta_t") + 1).alias("delta_t_weighted"),
@@ -313,7 +306,9 @@ def model_predict(
     )
 
     # Solve tracking
-    solve_tracking(
+    solution_graph = solve_tracking(
         graph=ds.graph,
         config=solver_config,
     )
+
+    return solution_graph

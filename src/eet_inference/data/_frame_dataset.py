@@ -82,7 +82,6 @@ class FrameDataset(Dataset):
             self._df_transforms,
             self._dict_transforms,
         )
-
         if index == 0 and self._return_graph:
             data[DataKeys.GRAPH] = self.graph
             data[DataKeys.GT_GRAPH] = self.gt_graph

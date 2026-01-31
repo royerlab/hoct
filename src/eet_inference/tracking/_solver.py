@@ -83,7 +83,7 @@ class ILPSolverConfig(BaseModel):
             disappearance_weight=0.25,
             division_weight=0.25,
             edge_bias=0.5,
-            node_weight=0.0,
+            node_weight=-10.0,
             timeout=600.0,
             tracklet_solver=True,
         )

@@ -3,6 +3,7 @@
 from pathlib import Path
 from typing import Optional
 
+import tracksdata as td
 import torch
 import typer
 import yaml
@@ -18,6 +19,7 @@ app = typer.Typer(
     name="eet-inference",
     help="Inference CLI for Edge Embedding Tracking (EET) model",
     add_completion=False,
+    pretty_exceptions_enable=False,
 )
 console = Console()
 
@@ -31,17 +33,17 @@ def version_callback(value: bool):
 
 @app.command()
 def predict(
-    geff_path: Path = typer.Argument(..., help="Path to GEFF file", exists=True, dir_okay=False),
+    geff_path: Path = typer.Argument(..., help="Path to GEFF directory", exists=True, dir_okay=True, file_okay=False),
     model_path: Path = typer.Argument(..., help="Path to PyTorch model checkpoint", exists=True, dir_okay=False),
+    output: Path = typer.Option(None, "--output", "-o", help="Output GEFF directory (default: overwrite input)"),
     config_path: Optional[Path] = typer.Option(
         None, "--config", "-c", help="Path to ILP solver config YAML file", exists=True, dir_okay=False
     ),
-    window_size: int = typer.Option(3, "--window", "-w", help="Temporal window size for frame dataset"),
-    output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output GEFF path (default: overwrite input)"),
+    window_size: int = typer.Option(5, "--window", "-w", help="Temporal window size for frame dataset"),
     device: str = typer.Option("cuda", "--device", "-d", help="Device to use: 'cuda', 'mps', or 'cpu'"),
 ):
     """
-    Run model prediction and tracking on a GEFF file.
+    Run model prediction and tracking on a GEFF directory.
 
     This command:
     1. Loads the GEFF graph and model
@@ -62,15 +64,30 @@ def predict(
         solver_config = ILPSolverConfig(**config_dict)
     else:
         console.print("Using default solver configuration")
-        solver_config = ILPSolverConfig()
+        solver_config = ILPSolverConfig.default()
 
     console.print(f"Solver config: {solver_config.model_dump()}")
 
-    # Load dataset
     console.print(f"\nLoading GEFF from: {geff_path}")
-    ds = FrameDataset(graph_path=str(geff_path), window_size=window_size)
-    console.print(f"Dataset: {len(ds.graph.nodes())} nodes, {len(ds.graph.edges())} edges")
-    console.print(f"Time frames: {ds.graph.node_attrs(['t'])['t'].min()} - {ds.graph.node_attrs(['t'])['t'].max()}")
+    graph, geff_metadata = td.graph.InMemoryGraph.from_geff(str(geff_path))
+    properties = [
+        "equivalent_diameter_area",
+        "intensity_min",
+        "intensity_max",
+        "intensity_mean",
+        "intensity_std",
+        "inertia_tensor",
+        "border_dist",
+    ]
+
+    # Load dataset
+    ds = FrameDataset(
+        graph=graph,
+        properties=properties,
+        min_window_size=window_size,
+    )
+    console.print(f"Dataset: {ds.graph.num_nodes()} nodes, {ds.graph.num_edges()} edges")
+    console.print(f"Time frames: {ds.graph.node_attrs(attr_keys=['t'])['t'].min()} - {ds.graph.node_attrs(attr_keys=['t'])['t'].max()}")
 
     # Load model
     console.print(f"\nLoading model from: {model_path}")
@@ -89,30 +106,12 @@ def predict(
 
     # Run prediction
     console.print("\n[bold green]Running prediction and tracking...[/bold green]")
-    try:
-        model_predict(model, ds, solver_config=solver_config)
-        console.print("[bold green]✓ Prediction and tracking complete![/bold green]")
-    except Exception as e:
-        console.print(f"[bold red]✗ Error during prediction: {e}[/bold red]")
-        raise typer.Exit(code=1)
+    model_predict(model, ds, solver_config=solver_config)
 
     # Save output
-    output_path = output or geff_path
-    console.print(f"\nSaving results to: {output_path}")
-    ds.graph.to_geff(str(output_path))
+    console.print(f"\nSaving results to: {output}")
+    ds.graph.to_geff(output)
     console.print("[bold green]✓ Results saved successfully![/bold green]")
-
-    # Summary
-    solution_nodes = ds.graph.node_attrs(["solution"])["solution"].sum()
-    solution_edges = ds.graph.edge_attrs(["solution"])["solution"].sum()
-    console.print(
-        Panel.fit(
-            f"[bold]Solution Summary[/bold]\n"
-            f"Nodes in solution: {solution_nodes}\n"
-            f"Edges in solution: {solution_edges}",
-            style="green",
-        )
-    )
 
 
 @app.command()
@@ -128,7 +127,7 @@ def init_config(
     console.print(Panel.fit("Generating ILP Solver Config Template", style="bold blue"))
 
     # Create default config and export to dict
-    default_config = ILPSolverConfig()
+    default_config = ILPSolverConfig.default()
     config_dict = default_config.model_dump()
 
     # Add comments as a separate structure
