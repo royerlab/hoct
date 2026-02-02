@@ -2,23 +2,63 @@
 
 import polars as pl
 import tracksdata as td
+from eet_features.constants import REGIONPROPS
+from eet_features.graph import create_graph
 from numpy.typing import ArrayLike
 from tracksdata.functional import TilingScheme
 
-from eet_features.graph import create_graph
-from eet_features.constants import REGIONPROPS
 from eet_inference._logging import LOG
-from eet_inference.data import FrameDataset, TiledRoiDataset
-from eet_inference.data._transforms import Standardize
+from eet_inference.data import FrameDataset, GraphConcatDataset, TiledRoiDataset
+from eet_inference.data._transforms import Affine, Flip, Standardize
 from eet_inference.inference import EdgeModel, model_predict
 from eet_inference.tracking import ILPSolverConfig
 
-__all__ = ["predict", "create_graph_from_points"]
+__all__ = ["create_graph_from_points", "predict"]
 
 
-_MEAN = [4.6326e+02,  2.9380e+00,  3.5649e+02,  3.4491e+02,  1.1521e+01, 2.7600e-01,  9.6600e-01,  5.7400e-01,  1.6200e-01,  1.6781e+02, -2.7000e-02,  5.0000e-02, -2.7000e-02,  8.7012e+01, -1.4010e+00, 5.0000e-02, -1.4010e+00,  8.3695e+01,  9.0000e-03]
+_MEAN = [
+    4.6326e02,
+    2.9380e00,
+    3.5649e02,
+    3.4491e02,
+    1.1521e01,
+    2.7600e-01,
+    9.6600e-01,
+    5.7400e-01,
+    1.6200e-01,
+    1.6781e02,
+    -2.7000e-02,
+    5.0000e-02,
+    -2.7000e-02,
+    8.7012e01,
+    -1.4010e00,
+    5.0000e-02,
+    -1.4010e00,
+    8.3695e01,
+    9.0000e-03,
+]
 
-_STD = [5.5578e+02, 7.6000e+00, 1.9588e+02, 2.2610e+02, 8.1990e+00, 2.1600e-01, 2.8100e-01, 1.9300e-01, 6.9000e-02, 6.7845e+02, 3.1670e+00, 2.8750e+00, 3.1670e+00, 5.1292e+02, 1.8274e+02, 2.8750e+00, 1.8274e+02, 3.0608e+02, 7.8000e-02]
+_STD = [
+    5.5578e02,
+    7.6000e00,
+    1.9588e02,
+    2.2610e02,
+    8.1990e00,
+    2.1600e-01,
+    2.8100e-01,
+    1.9300e-01,
+    6.9000e-02,
+    6.7845e02,
+    3.1670e00,
+    2.8750e00,
+    3.1670e00,
+    5.1292e02,
+    1.8274e02,
+    2.8750e00,
+    1.8274e02,
+    3.0608e02,
+    7.8000e-02,
+]
 
 
 def create_graph_from_points(
@@ -64,21 +104,25 @@ def create_graph_from_points(
     >>> from eet_inference import create_graph_from_points
     >>>
     >>> # Create 2D points
-    >>> points = pl.DataFrame({
-    ...     't': [0, 0, 1, 1],
-    ...     'y': [10, 20, 15, 25],
-    ...     'x': [10, 20, 12, 22],
-    ... })
+    >>> points = pl.DataFrame(
+    ...     {
+    ...         "t": [0, 0, 1, 1],
+    ...         "y": [10, 20, 15, 25],
+    ...         "x": [10, 20, 12, 22],
+    ...     }
+    ... )
     >>> graph = create_graph_from_points(points)
     >>>
     >>> # Create 3D points with node_id
-    >>> points = pl.DataFrame({
-    ...     'node_id': [1, 2, 3, 4],
-    ...     't': [0, 0, 1, 1],
-    ...     'z': [5, 5, 6, 6],
-    ...     'y': [10, 20, 15, 25],
-    ...     'x': [10, 20, 12, 22],
-    ... })
+    >>> points = pl.DataFrame(
+    ...     {
+    ...         "node_id": [1, 2, 3, 4],
+    ...         "t": [0, 0, 1, 1],
+    ...         "z": [5, 5, 6, 6],
+    ...         "y": [10, 20, 15, 25],
+    ...         "x": [10, 20, 12, 22],
+    ...     }
+    ... )
     >>> graph = create_graph_from_points(points, scale=(1, 0.5, 1, 1))
 
     Notes
@@ -102,6 +146,7 @@ def predict(
     scale: tuple[float, ...] | None = None,
     window_size: int = 5,
     tiling_scheme: TilingScheme | None = None,
+    test_time_augs: int = 0,
 ) -> td.graph.InMemoryGraph:
     """
     Run end-to-end cell tracking prediction from raw data.
@@ -134,6 +179,9 @@ def predict(
     tiling_scheme : TilingScheme | None, default=None
         Optional tiling scheme for spatially tiled inference. If provided, uses TiledRoiDataset
         instead of FrameDataset. Useful for large volumes that don't fit in memory.
+    test_time_augs : int, default=0
+        Number of test time augmentations to apply. If 0, no augmentations are applied.
+        If > 0, a random augmentation is applied for each augmentation.
 
     Returns
     -------
@@ -199,12 +247,25 @@ def predict(
 
     LOG.info(f"Created graph with {graph.num_nodes()} nodes and {graph.num_edges()} edges")
 
+    if test_time_augs > 0:
+        df_transforms = [
+            Flip(columns=["z", "y", "x"], p=0.5),
+            Affine(
+                degree_range=(-180, 180),
+                scale_range=(1, 1),
+                shear_range=((0, 0), (0, 0)),
+            ),
+        ]
+    else:
+        df_transforms = []
+
     if tiling_scheme is not None:
         LOG.info("Creating tiled ROI dataset")
         dataset = TiledRoiDataset(
             graph=graph,
             properties=REGIONPROPS,
             tiling_scheme=tiling_scheme,
+            df_transforms=df_transforms,
             dict_transforms=[Standardize(mean=_MEAN, std=_STD)],
         )
     else:
@@ -213,8 +274,12 @@ def predict(
             graph=graph,
             min_window_size=window_size,
             properties=REGIONPROPS,
+            df_transforms=df_transforms,
             dict_transforms=[Standardize(mean=_MEAN, std=_STD)],
         )
+
+    if test_time_augs > 0:
+        dataset = GraphConcatDataset([dataset] * test_time_augs)
 
     LOG.info("Running model inference and solving tracking")
     solution_graph = model_predict(model, dataset, solver_config=solver_config)

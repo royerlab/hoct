@@ -1,15 +1,15 @@
 """Basic example of cell tracking with EET."""
 
-import numpy as np
-import torch
-import napari
 from pathlib import Path
-from dask.array.image import imread
 
+import napari
+import torch
 import tracksdata as td
+from dask.array.image import imread
+from eet_features.features import normalize_image
+
 from eet_inference import predict
 from eet_inference.tracking import ILPSolverConfig
-from eet_features.features import normalize_image
 
 
 def main():
@@ -48,6 +48,7 @@ def main():
         distance_threshold=300.0,
         n_neighbors=5,
         max_delta_t=3,
+        test_time_augs=5,  # optional, takes longer but it improves performance
     )
 
     # Visualize

@@ -4,8 +4,8 @@ from pathlib import Path
 
 import polars as pl
 import tracksdata as td
+from torch.utils.data import ConcatDataset, Dataset
 
-from torch.utils.data import Dataset
 from eet_inference.data._batching import DataItem, DataKeys, item_from_filter
 
 
@@ -152,3 +152,17 @@ class FrameDataset(Dataset):
             return len(attrs[0])
         else:
             return 1
+
+
+class GraphConcatDataset(ConcatDataset):
+    @property
+    def graph(self) -> td.graph.InMemoryGraph:
+        return self.datasets[0].graph
+
+    @property
+    def gt_graph(self) -> td.graph.InMemoryGraph | None:
+        return self.datasets[0].gt_graph
+
+    @property
+    def group(self) -> str:
+        return self.datasets[0].group
