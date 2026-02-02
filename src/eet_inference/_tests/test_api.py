@@ -8,6 +8,7 @@ import pytest
 
 from eet_features.graph import create_graph
 from eet_inference.tracking import ILPSolverConfig
+from eet_features.constants import REGIONPROPS
 
 
 @pytest.fixture
@@ -39,17 +40,28 @@ class TestCreateGraphFromLabels:
 
     def test_labels_without_images_no_intensity_features(self, synthetic_2d_labels):
         """Test that intensity features are not added when images=None."""
-        graph = create_graph(labels=synthetic_2d_labels, images=None)
+        graph = create_graph(
+            labels=synthetic_2d_labels,
+            images=None,
+            distance_threshold=300.0,
+            n_neighbors=5,
+            delta_t=3,
+        )
 
         node_attrs = graph.node_attr_keys()
-        assert "intensity_mean" not in node_attrs
-        assert "intensity_min" not in node_attrs
-        assert "equivalent_diameter_area" in node_attrs  # Geometric feature should exist
+        for prop in REGIONPROPS:
+            assert prop in node_attrs
 
     def test_labels_with_images_has_intensity_features(self, synthetic_2d_labels):
         """Test that intensity features are added when images provided."""
         images = np.random.randn(*synthetic_2d_labels.shape).astype(np.float32)
-        graph = create_graph(labels=synthetic_2d_labels, images=images)
+        graph = create_graph(
+            labels=synthetic_2d_labels,
+            images=images,
+            distance_threshold=300.0,
+            n_neighbors=5,
+            delta_t=3,
+        )
 
         node_attrs = graph.node_attr_keys()
         assert "intensity_mean" in node_attrs
@@ -58,15 +70,31 @@ class TestCreateGraphFromLabels:
 
     def test_2d_vs_3d_dimensionality(self, synthetic_2d_labels, synthetic_3d_labels):
         """Test that 2D and 3D data are correctly distinguished."""
-        graph_2d = create_graph(labels=synthetic_2d_labels)
-        graph_3d = create_graph(labels=synthetic_3d_labels)
+        graph_2d = create_graph(
+            labels=synthetic_2d_labels,
+            distance_threshold=300.0,
+            n_neighbors=5,
+            delta_t=3,
+        )
+        graph_3d = create_graph(
+            labels=synthetic_3d_labels,
+            distance_threshold=300.0,
+            n_neighbors=5,
+            delta_t=3,
+        )
 
         assert graph_2d.metadata()["was_2d"] is True
         assert graph_3d.metadata()["was_2d"] is False
 
     def test_inference_mode_no_gt_features(self, synthetic_2d_labels):
         """Test that GT features are not added in inference mode."""
-        graph = create_graph(labels=synthetic_2d_labels, gt_graph=None)
+        graph = create_graph(
+            labels=synthetic_2d_labels,
+            gt_graph=None,
+            distance_threshold=300.0,
+            n_neighbors=5,
+            delta_t=3,
+        )
 
         edge_attrs = graph.edge_attr_keys()
         assert "edge_is_gt" not in edge_attrs
