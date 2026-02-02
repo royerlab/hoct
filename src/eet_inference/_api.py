@@ -7,6 +7,7 @@ from tracksdata.functional import TilingScheme
 
 from eet_features.features import add_border_dist, add_delta_t
 from eet_features.graph import create_graph
+from eet_features.constants import REGIONPROPS
 from eet_inference._logging import LOG
 from eet_inference.data import FrameDataset, TiledRoiDataset
 from eet_inference.inference import EdgeModel, model_predict
@@ -90,11 +91,11 @@ def predict(
     labels: ArrayLike | None = None,
     images: ArrayLike | None = None,
     solver_config: ILPSolverConfig | None = None,
-    distance_threshold: float = 200.0,
+    distance_threshold: float = 300.0,
     n_neighbors: int = 5,
     max_delta_t: int = 3,
     scale: tuple[float, ...] | None = None,
-    window_size: int = 3,
+    window_size: int = 5,
     tiling_scheme: TilingScheme | None = None,
 ) -> td.graph.InMemoryGraph:
     """
@@ -187,31 +188,30 @@ def predict(
         gt_graph=None,  # Inference mode - no ground truth
         distance_threshold=distance_threshold,
         n_neighbors=n_neighbors,
-        delta_t=float(max_delta_t),
+        delta_t=max_delta_t,
         scale=scale,
     )
 
-    LOG.info(f"Created graph with {len(graph.nodes())} nodes and {len(graph.edges())} edges")
+    LOG.info(f"Created graph with {graph.num_nodes()} nodes and {graph.num_edges()} edges")
 
     if tiling_scheme is not None:
         LOG.info("Creating tiled ROI dataset")
         dataset = TiledRoiDataset(
             graph=graph,
-            properties=[],
+            properties=REGIONPROPS,
             tiling_scheme=tiling_scheme,
         )
     else:
         LOG.info("Creating frame dataset with window_size=%d", window_size)
-        dataset = FrameDataset(graph=graph, window_size=window_size)
+        dataset = FrameDataset(
+            graph=graph,
+            min_window_size=window_size,
+            properties=REGIONPROPS,
+        )
 
     LOG.info("Running model inference and solving tracking")
-    model_predict(model, dataset, solver_config=solver_config)
+    solution_graph = model_predict(model, dataset, solver_config=solver_config)
 
-    LOG.info("Prediction complete!")
+    LOG.info(f"Solution: {solution_graph.num_nodes()} nodes, {solution_graph.num_edges()} edges")
 
-    # Extract solution summary
-    solution_nodes = graph.node_attrs(["solution"])["solution"].sum()
-    solution_edges = graph.edge_attrs(["solution"])["solution"].sum()
-    LOG.info(f"Solution: {solution_nodes} nodes, {solution_edges} edges")
-
-    return graph
+    return solution_graph

@@ -97,8 +97,9 @@ def item_from_filter(
         *spatial_cols,
         *properties,
         td.DEFAULT_ATTR_KEYS.NODE_ID,
-        "is_div",
     ]
+    if "is_div" in sp_filter._graph.node_attr_keys():
+        attrs.append("is_div")
 
     node_attrs = sp_filter.node_attrs(attr_keys=attrs)
     # TODO: crop transform could be optimized and applied during slicing
@@ -173,7 +174,7 @@ def item_from_filter(
     data[DataKeys.EDGE_POS] = edge_attrs.select(*spatial_cols).to_torch(dtype=pl.Float32)
     data[DataKeys.DELTA_T] = (edge_attrs["target_t"] - edge_attrs["source_t"]).cast(pl.Float32).to_torch()
 
-    node_attrs = node_attrs.drop(td.DEFAULT_ATTR_KEYS.NODE_ID, "is_div")  # not needed anymore
+    node_attrs = node_attrs.drop(td.DEFAULT_ATTR_KEYS.NODE_ID, "is_div", strict=False)  # not needed anymore
     node_attrs = node_attrs.select(
         td.DEFAULT_ATTR_KEYS.T,
         *spatial_cols,
