@@ -5,15 +5,20 @@ import tracksdata as td
 from numpy.typing import ArrayLike
 from tracksdata.functional import TilingScheme
 
-from eet_features.features import add_border_dist, add_delta_t
 from eet_features.graph import create_graph
 from eet_features.constants import REGIONPROPS
 from eet_inference._logging import LOG
 from eet_inference.data import FrameDataset, TiledRoiDataset
+from eet_inference.data._transforms import Standardize
 from eet_inference.inference import EdgeModel, model_predict
 from eet_inference.tracking import ILPSolverConfig
 
 __all__ = ["predict", "create_graph_from_points"]
+
+
+_MEAN = [4.6326e+02,  2.9380e+00,  3.5649e+02,  3.4491e+02,  1.1521e+01, 2.7600e-01,  9.6600e-01,  5.7400e-01,  1.6200e-01,  1.6781e+02, -2.7000e-02,  5.0000e-02, -2.7000e-02,  8.7012e+01, -1.4010e+00, 5.0000e-02, -1.4010e+00,  8.3695e+01,  9.0000e-03]
+
+_STD = [5.5578e+02, 7.6000e+00, 1.9588e+02, 2.2610e+02, 8.1990e+00, 2.1600e-01, 2.8100e-01, 1.9300e-01, 6.9000e-02, 6.7845e+02, 3.1670e+00, 2.8750e+00, 3.1670e+00, 5.1292e+02, 1.8274e+02, 2.8750e+00, 1.8274e+02, 3.0608e+02, 7.8000e-02]
 
 
 def create_graph_from_points(
@@ -200,6 +205,7 @@ def predict(
             graph=graph,
             properties=REGIONPROPS,
             tiling_scheme=tiling_scheme,
+            dict_transforms=[Standardize(mean=_MEAN, std=_STD)],
         )
     else:
         LOG.info("Creating frame dataset with window_size=%d", window_size)
@@ -207,6 +213,7 @@ def predict(
             graph=graph,
             min_window_size=window_size,
             properties=REGIONPROPS,
+            dict_transforms=[Standardize(mean=_MEAN, std=_STD)],
         )
 
     LOG.info("Running model inference and solving tracking")
