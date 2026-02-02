@@ -1,5 +1,6 @@
 """Command-line interface for eet-inference."""
 
+import shutil
 from pathlib import Path
 from typing import Optional
 
@@ -35,10 +36,12 @@ def version_callback(value: bool):
 def predict(
     geff_path: Path = typer.Argument(..., help="Path to GEFF directory", exists=True, dir_okay=True, file_okay=False),
     model_path: Path = typer.Argument(..., help="Path to PyTorch model checkpoint", exists=True, dir_okay=False),
-    output: Path = typer.Option(None, "--output", "-o", help="Output GEFF directory (default: overwrite input)"),
+    output: Path = typer.Option(..., "--output", "-o", help="Output GEFF directory (default: overwrite input)"),
+    solution: bool = typer.Option(False, "--solution", "-s", help="Save solution graph rather the full graph with probabilities"),
     config_path: Optional[Path] = typer.Option(
         None, "--config", "-c", help="Path to ILP solver config YAML file", exists=True, dir_okay=False
     ),
+    overwrite: bool = typer.Option(False, "--overwrite", "-ow", help="Overwrite output directory"),
     window_size: int = typer.Option(5, "--window", "-w", help="Temporal window size for frame dataset"),
     device: str = typer.Option("cuda", "--device", "-d", help="Device to use: 'cuda', 'mps', or 'cpu'"),
 ):
@@ -55,6 +58,10 @@ def predict(
         eet-inference predict data.geff model.pt --config solver_config.yaml
     """
     console.print(Panel.fit("EET Inference - Model Prediction", style="bold blue"))
+
+    if output.exists() and not overwrite:
+        console.print(f"[red]Output directory {output} already exists. Use --overwrite to overwrite.[/red]")
+        raise typer.Exit()
 
     # Load ILP solver config
     if config_path:
@@ -101,16 +108,26 @@ def predict(
         device = "cpu"
 
     model = torch.jit.load(model_path, map_location=device)
+    model = model.to(device)  # Explicitly move model to device
     model.eval()
     console.print(f"Model loaded on device: {device}")
 
     # Run prediction
     console.print("\n[bold green]Running prediction and tracking...[/bold green]")
-    model_predict(model, ds, solver_config=solver_config)
+    solution_graph = model_predict(model, ds, solver_config=solver_config)
 
     # Save output
     console.print(f"\nSaving results to: {output}")
-    ds.graph.to_geff(output)
+
+    # Remove existing directory if overwrite is enabled
+    if output.exists() and overwrite:
+        shutil.rmtree(output)
+
+    if solution:
+        solution_graph.to_geff(output)
+    else:
+        ds.graph.to_geff(output)
+
     console.print("[bold green]✓ Results saved successfully![/bold green]")
 
 

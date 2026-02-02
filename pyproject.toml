@@ -35,7 +35,7 @@ dependencies = [
     "typer>=0.21.1",
     "rich>=14.3.1",
     "dask>=2026.1.1",
-    "gurobipy>=13.0.1",
+    "gurobipy>12.0.1,<13.0.0",
 ]
 
 [project.optional-dependencies]
