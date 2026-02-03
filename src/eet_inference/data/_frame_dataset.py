@@ -39,10 +39,12 @@ class FrameDataset(Dataset):
 
         time_pts = self._graph.time_points()
 
+        min_time = min(time_pts)
+
         self._time_range = list(
             range(
-                min(time_pts),
-                max(time_pts) + 2 - self.window_size,
+                min_time,
+                max(max(time_pts) + 2 - self.window_size, min_time + 1),
             )
         )
 
@@ -72,7 +74,9 @@ class FrameDataset(Dataset):
         t = index + self._time_range[0]
         sp_filter = self.graph.filter(
             node_ids=list(
-                itertools.chain.from_iterable(self.graph._time_to_nodes[i] for i in range(t, t + self.window_size))
+                itertools.chain.from_iterable(
+                    self.graph._time_to_nodes.get(i, []) for i in range(t, t + self.window_size)
+                )
             ),
         )
         data = item_from_filter(
