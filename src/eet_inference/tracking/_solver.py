@@ -52,19 +52,15 @@ class ILPSolverConfig(BaseModel):
     >>> config = ILPSolverConfig(delta_t_weight=0.5)
 
     >>> # Two-pass tracklet solving with custom weights
-    >>> config = ILPSolverConfig(
-    ...     appearance_weight=2.0,
-    ...     disappearance_weight=2.0,
-    ...     tracklet_solver=True
-    ... )
+    >>> config = ILPSolverConfig(appearance_weight=2.0, disappearance_weight=2.0, tracklet_solver=True)
     """
 
-    appearance_weight: float = Field(description="Weight for appearance edges")
-    disappearance_weight: float = Field(description="Weight for disappearance edges")
-    division_weight: float = Field(description="Weight for division edges")
-    node_weight: float = Field(description="Weight for node selection")
-    delta_t_weight: float = Field(description="Penalty for edges spanning multiple frames")
-    edge_bias: float = Field(description="Bias added to edge weights")
+    appearance_weight: float | td.attrs.Attr = Field(description="Weight for appearance edges")
+    disappearance_weight: float | td.attrs.Attr = Field(description="Weight for disappearance edges")
+    division_weight: float | td.attrs.Attr = Field(description="Weight for division edges")
+    node_weight: float | td.attrs.Attr = Field(description="Weight for node selection")
+    delta_t_weight: float | td.attrs.Attr = Field(description="Penalty for edges spanning multiple frames")
+    edge_bias: float | td.attrs.Attr = Field(description="Bias added to edge weights")
     timeout: float = Field(600.0, description="Solver timeout in seconds")
     tracklet_solver: bool = Field(description="Use two-pass tracklet solver")
 
@@ -73,7 +69,6 @@ class ILPSolverConfig(BaseModel):
         "extra": "forbid",
         "arbitrary_types_allowed": True,
     }
-
 
     @classmethod
     def default(cls) -> "ILPSolverConfig":
@@ -163,4 +158,3 @@ def solve_tracking(
         ).solve(graph)
 
     return solution_graph
-
