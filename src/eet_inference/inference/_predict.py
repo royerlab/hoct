@@ -122,7 +122,7 @@ def model_predict(
     >>> config = ILPSolverConfig(
     ...     appearance_weight=2.0,
     ...     division_weight=1e6,  # Disable divisions
-    ...     tracklet_solver=True
+    ...     tracklet_solver=True,
     ... )
     >>> model_predict(model, ds, solver_config=config)
     """
@@ -286,7 +286,7 @@ def model_predict(
 
     # Update graph with predictions
     if "similarity" not in ds.graph.edge_attr_keys():
-        ds.graph.add_edge_attr_key("similarity", -1.0)
+        ds.graph.add_edge_attr_key("similarity", pl.Float32, -1.0)
 
     ds.graph.update_edge_attrs(
         attrs={
@@ -296,7 +296,7 @@ def model_predict(
     )
 
     if "orphan_prob" not in ds.graph.node_attr_keys():
-        ds.graph.add_node_attr_key("orphan_prob", 0.0)
+        ds.graph.add_node_attr_key("orphan_prob", pl.Float32, 0.0)
 
     ds.graph.update_node_attrs(
         attrs={

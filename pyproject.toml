@@ -48,7 +48,6 @@ dev = [
 
 [tool.uv.sources]
 eet-features = { workspace = true }
-tracksdata = { git = "https://github.com/royerlab/tracksdata", rev = "dde23bd8c8668e48f2e75660867c389fad8e2308" }
 
 [project.scripts]
 eet-inference = "eet_inference.cli:main"

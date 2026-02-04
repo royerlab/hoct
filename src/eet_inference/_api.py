@@ -137,6 +137,8 @@ def create_graph_from_points(
 
 def predict(
     model: EdgeModel,
+    *,
+    graph: td.graph.BaseGraph | None = None,
     labels: ArrayLike | None = None,
     images: ArrayLike | None = None,
     solver_config: ILPSolverConfig | None = None,
@@ -160,9 +162,11 @@ def predict(
     ----------
     model : EdgeModel
         Trained EET edge prediction model (PyTorch JIT or regular model).
-    labels : ArrayLike
-        Segmentation labels of shape (T, [Z,] Y, X). Required.
-    images : ArrayLike | None, default=None
+    graph : td.graph.BaseGraph | None
+        Graph with features ready for prediction.
+    labels : ArrayLike | None
+        Segmentation labels of shape (T, [Z,] Y, X)
+    images : ArrayLike | None
         Optional intensity images of shape (T, [Z,] Y, X).
     solver_config : ILPSolverConfig | None, default=None
         Configuration for the ILP tracking solver. If None, uses defaults.
@@ -234,16 +238,22 @@ def predict(
 
     LOG.info("Starting EET prediction pipeline")
 
-    LOG.info("Creating candidate tracking graph")
-    graph = create_graph(
-        labels=labels,
-        images=images,
-        gt_graph=None,  # Inference mode - no ground truth
-        distance_threshold=distance_threshold,
-        n_neighbors=n_neighbors,
-        delta_t=max_delta_t,
-        scale=scale,
-    )
+    if graph is None:
+        LOG.info("Creating candidate tracking graph")
+        graph = create_graph(
+            labels=labels,
+            images=images,
+            gt_graph=None,  # Inference mode - no ground truth
+            distance_threshold=distance_threshold,
+            n_neighbors=n_neighbors,
+            delta_t=max_delta_t,
+            scale=scale,
+        )
+    else:
+        if labels is not None:
+            LOG.warning("`graph` and `labels` are not `None`, `labels` are ignored")
+        if images is not None:
+            LOG.warning("`graph` and `images` are not `None`, `images` are ignored")
 
     LOG.info(f"Created graph with {graph.num_nodes()} nodes and {graph.num_edges()} edges")
 

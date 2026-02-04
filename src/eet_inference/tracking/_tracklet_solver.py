@@ -97,14 +97,14 @@ class TrackletSolver(ILPSolver):
         )
 
         tracklet_graph = td.graph.IndexedRXGraph()
-        tracklet_graph.add_node_attr_key("start_t", default_value=-1.0)
-        tracklet_graph.add_node_attr_key("end_t", default_value=-1.0)
-        tracklet_graph.add_node_attr_key("appearance_weight", default_value=0.0)
-        tracklet_graph.add_node_attr_key("disappearance_weight", default_value=0.0)
-        tracklet_graph.add_node_attr_key("division_weight", default_value=0.0)
-        tracklet_graph.add_node_attr_key("node_weight", default_value=0.0)
-        tracklet_graph.add_node_attr_key("start_node_id", default_value=-1)
-        tracklet_graph.add_node_attr_key("end_node_id", default_value=-1)
+        tracklet_graph.add_node_attr_key("start_t", pl.Float32, -1.0)
+        tracklet_graph.add_node_attr_key("end_t", pl.Float32, -1.0)
+        tracklet_graph.add_node_attr_key("appearance_weight", pl.Float32, 0.0)
+        tracklet_graph.add_node_attr_key("disappearance_weight", pl.Float32, 0.0)
+        tracklet_graph.add_node_attr_key("division_weight", pl.Float32, 0.0)
+        tracklet_graph.add_node_attr_key("node_weight", pl.Float32, 0.0)
+        tracklet_graph.add_node_attr_key("start_node_id", pl.Int64, -1)
+        tracklet_graph.add_node_attr_key("end_node_id", pl.Int64, -1)
 
         tracklet_graph.bulk_add_nodes(
             list(tracklet_nodes_df.drop(tracklet_id_key).iter_rows(named=True)),
@@ -150,9 +150,9 @@ class TrackletSolver(ILPSolver):
         if len(tracklet_edges_df) == 0:
             return None
 
-        tracklet_graph.add_edge_attr_key("edge_weight", default_value=0.0)
-        tracklet_graph.add_edge_attr_key(td.DEFAULT_ATTR_KEYS.SOLUTION, default_value=False)
-        tracklet_graph.add_edge_attr_key("delta_t", default_value=-1.0)
+        tracklet_graph.add_edge_attr_key("edge_weight", pl.Float32, 0.0)
+        tracklet_graph.add_edge_attr_key(td.DEFAULT_ATTR_KEYS.SOLUTION, pl.Boolean, False)
+        tracklet_graph.add_edge_attr_key("delta_t", pl.Float32, -1.0)
         tracklet_graph.bulk_add_edges(
             list(tracklet_edges_df.iter_rows(named=True)),
         )
