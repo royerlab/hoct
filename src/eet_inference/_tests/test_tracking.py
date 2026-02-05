@@ -4,8 +4,8 @@ import polars as pl
 import pytest
 import tracksdata as td
 
-from eet_inference.tracking import ILPSolverConfig, TrackletSolver, solve_tracking
 from eet_inference._tests.conftest import GEFF_2D, GEFF_3D
+from eet_inference.tracking import ILPSolverConfig, TrackletSolver, solve_tracking
 
 
 def prepare_graph_for_tracking(graph: td.graph.BaseGraph) -> td.graph.BaseGraph:
@@ -34,12 +34,12 @@ def prepare_graph_for_tracking(graph: td.graph.BaseGraph) -> td.graph.BaseGraph:
 
     # Add similarity as edge attribute
     if "similarity" not in graph.edge_attr_keys():
-        graph.add_edge_attr_key("similarity", default_value=0.0)
+        graph.add_edge_attr_key("similarity", pl.Float32, 0.0)
     graph.update_edge_attrs(attrs={"similarity": similarity_scores})
 
     # Add orphan_prob if missing (default to 0.0 for testing)
     if "orphan_prob" not in graph.node_attr_keys():
-        graph.add_node_attr_key("orphan_prob", default_value=0.0)
+        graph.add_node_attr_key("orphan_prob", pl.Float32, 0.0)
 
     return graph
 
@@ -105,9 +105,9 @@ class TestSolveTracking:
 
         # Add solution attribute keys if not present
         if td.DEFAULT_ATTR_KEYS.SOLUTION not in graph.node_attr_keys():
-            graph.add_node_attr_key(td.DEFAULT_ATTR_KEYS.SOLUTION, default_value=False)
+            graph.add_node_attr_key(td.DEFAULT_ATTR_KEYS.SOLUTION, pl.Boolean, False)
         if td.DEFAULT_ATTR_KEYS.SOLUTION not in graph.edge_attr_keys():
-            graph.add_edge_attr_key(td.DEFAULT_ATTR_KEYS.SOLUTION, default_value=False)
+            graph.add_edge_attr_key(td.DEFAULT_ATTR_KEYS.SOLUTION, pl.Boolean, False)
 
         # Add dummy solution
         graph.update_node_attrs(attrs={td.DEFAULT_ATTR_KEYS.SOLUTION: True})
@@ -128,12 +128,8 @@ class TestSolveTracking:
 
         # Solution should have been recomputed successfully
         # Verify that solution attributes exist and are valid
-        node_solutions = solution.node_attrs(attr_keys=[td.DEFAULT_ATTR_KEYS.SOLUTION])[
-            td.DEFAULT_ATTR_KEYS.SOLUTION
-        ]
-        edge_solutions = solution.edge_attrs(attr_keys=[td.DEFAULT_ATTR_KEYS.SOLUTION])[
-            td.DEFAULT_ATTR_KEYS.SOLUTION
-        ]
+        node_solutions = solution.node_attrs(attr_keys=[td.DEFAULT_ATTR_KEYS.SOLUTION])[td.DEFAULT_ATTR_KEYS.SOLUTION]
+        edge_solutions = solution.edge_attrs(attr_keys=[td.DEFAULT_ATTR_KEYS.SOLUTION])[td.DEFAULT_ATTR_KEYS.SOLUTION]
 
         # Check that solution is binary (True/False)
         assert node_solutions.dtype == pl.Boolean
