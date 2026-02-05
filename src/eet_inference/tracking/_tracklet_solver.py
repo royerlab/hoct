@@ -192,24 +192,27 @@ class TrackletSolver(ILPSolver):
 
         edge_ids = []
         values = []
+        valid_keys = graph.edge_attr_keys()
 
         for edge_attrs in edges_df.iter_rows(named=True):
             src, tgt = edge_attrs["source_end_node_id"], edge_attrs["target_start_node_id"]
             try:
                 edge_id = graph.edge_id(src, tgt)
             except rx.NoEdgeBetweenNodes:
+                new_edge_attrs = {
+                    td.DEFAULT_ATTR_KEYS.SOLUTION: edge_attrs[td.DEFAULT_ATTR_KEYS.SOLUTION],
+                    td.DEFAULT_ATTR_KEYS.MATCHED_EDGE_MASK: False,
+                    td.DEFAULT_ATTR_KEYS.EDGE_DIST: 0.0,
+                    "delta_t": edge_attrs["delta_t"],
+                    "edge_is_gt": False,
+                    "is_div": False,
+                    "similarity": -1.0,
+                }
+                new_edge_attrs = {k: v for k, v in new_edge_attrs.items() if k in valid_keys}
                 edge_id = graph.add_edge(
                     src,
                     tgt,
-                    attrs={
-                        td.DEFAULT_ATTR_KEYS.SOLUTION: edge_attrs[td.DEFAULT_ATTR_KEYS.SOLUTION],
-                        td.DEFAULT_ATTR_KEYS.MATCHED_EDGE_MASK: False,
-                        td.DEFAULT_ATTR_KEYS.EDGE_DIST: 0.0,
-                        "delta_t": edge_attrs["delta_t"],
-                        "edge_is_gt": False,
-                        "is_div": False,
-                        "similarity": -1.0,
-                    },
+                    attrs=new_edge_attrs,
                 )
             edge_ids.append(edge_id)
             values.append(edge_attrs[td.DEFAULT_ATTR_KEYS.SOLUTION])
