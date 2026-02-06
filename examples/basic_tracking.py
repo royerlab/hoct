@@ -48,6 +48,11 @@ def main():
         distance_threshold=300.0,
         n_neighbors=5,
         max_delta_t=3,
+        # this is only required for large volumes where tiled prediction is needed
+        tiling_scheme=td.functional.TilingScheme(
+            tile_shape=(1, 32, 256, 256),
+            overlap_shape=(2, 16, 120, 120),
+        ),
         test_time_augs=5,  # optional, takes longer but it improves performance
     )
 
