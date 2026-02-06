@@ -42,11 +42,7 @@ class TiledRoiDataset(Dataset):
                 tiling_scheme=tiling_scheme,
                 func=lambda x: x,
             )
-            if (
-                len(t.graph_filter_wo_overlap.node_ids()) > 0  # removing empty tiles
-                and t.slicing[0].start >= min_t
-                and t.slicing[0].stop <= max_t
-            )
+            if len(t.graph_filter.edge_ids()) > 0  # removing empty tiles
         ]
 
         if len(self._tiles) == 0:
@@ -84,8 +80,10 @@ class TiledRoiDataset(Dataset):
         if self._sp_filter is None:
             self._sp_filter = self._graph.spatial_filter()
         return self._sp_filter
-    
+
     def __getitem__(self, index: int) -> DataItem:
         tile = self._tiles[index]
         sp_filter = self.sp_filter[tile.slicing]
-        return item_from_filter(sp_filter, self._spatial_cols, self._properties, self._df_transforms, self._dict_transforms)
+        return item_from_filter(
+            sp_filter, self._spatial_cols, self._properties, self._df_transforms, self._dict_transforms
+        )

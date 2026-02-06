@@ -296,7 +296,7 @@ def model_predict(
     )
 
     if "orphan_prob" not in ds.graph.node_attr_keys():
-        ds.graph.add_node_attr_key("orphan_prob", pl.Float32, 0.0)
+        ds.graph.add_node_attr_key("orphan_prob", pl.Float32, 1.0)
 
     ds.graph.update_node_attrs(
         attrs={

@@ -311,4 +311,3 @@ def collate_varying_length(
             raise ValueError(f"Unsupported type: {type(item_list[0])}")
 
     return output
-
