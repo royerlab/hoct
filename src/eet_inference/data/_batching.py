@@ -36,10 +36,6 @@ class DataKeys:
     GRAPH = "graph"
     GT_GRAPH = "gt_graph"
 
-    # Tiling keys
-    NODE_WITHIN_TILE = "node_within_tile"
-    EDGE_WITHIN_TILE = "edge_within_tile"
-
 
 class DataItem(TypedDict):
     t: torch.Tensor
@@ -56,8 +52,6 @@ class DataItem(TypedDict):
     edge_is_div: torch.Tensor | None
     graph: td.graph.InMemoryGraph | None
     gt_graph: td.graph.InMemoryGraph | None
-    node_within_tile: torch.Tensor | None
-    edge_within_tile: torch.Tensor | None
 
 
 _EDGE_KEYS = (
@@ -68,7 +62,6 @@ _EDGE_KEYS = (
     DataKeys.EDGE_IS_DIV,
     DataKeys.SOURCE_T,
     DataKeys.DELTA_T,
-    DataKeys.EDGE_WITHIN_TILE,
 )
 
 
