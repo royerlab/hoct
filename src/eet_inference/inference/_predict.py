@@ -74,6 +74,15 @@ class EdgeModel(torch.nn.Module):
         ...
 
 
+def _update_mask(mask: torch.Tensor | None, within_tile: torch.Tensor | None) -> torch.Tensor | None:
+    if mask is None:
+        return within_tile
+    if within_tile is None:
+        return mask
+    # both are true
+    return mask & within_tile
+
+
 @torch.inference_mode()
 def model_predict(
     model: EdgeModel,
@@ -181,6 +190,8 @@ def model_predict(
             d_t = _expand_dims(batch[DataKeys.DELTA_T])
             node_pos = _expand_dims(batch[DataKeys.NODE_POS])
             edge_pos = _expand_dims(batch[DataKeys.EDGE_POS])
+            node_within_tile = _expand_dims(batch.get(DataKeys.NODE_WITHIN_TILE, None))
+            edge_within_tile = _expand_dims(batch.get(DataKeys.EDGE_WITHIN_TILE, None))
 
             if node_mask is None:
                 node_mask = torch.ones(input_batch.shape[:2], dtype=torch.bool, device=device)
@@ -191,6 +202,8 @@ def model_predict(
             model_output = model.forward(input_batch, node_pos, edge_pos, edges, node_mask, edge_mask)
             pred, _, _, oph_logits = model_output
 
+            edge_mask = _update_mask(edge_mask, edge_within_tile)
+
             if edge_mask is not None:
                 pred = pred[edge_mask]
                 e_id = e_id[edge_mask]
@@ -199,6 +212,8 @@ def model_predict(
             edge_ids.append(e_id.cpu().ravel())
             sim_exp.append(pred.float().clamp(max=20).exp().cpu().ravel())
             delta_t.append(d_t.cpu().ravel())
+
+            node_mask = _update_mask(node_mask, node_within_tile)
 
             if node_mask is not None:
                 oph_logits = oph_logits[node_mask]

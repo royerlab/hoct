@@ -2,12 +2,13 @@ from collections.abc import Callable, Sequence
 from typing import NamedTuple
 
 import polars as pl
+import torch
 import tracksdata as td
 from torch.utils.data import Dataset
 from tracksdata.functional import TilingScheme, apply_tiled
 from tracksdata.graph._rustworkx_graph import RXFilter
 
-from eet_inference.data._batching import DataItem, item_from_filter
+from eet_inference.data._batching import DataItem, DataKeys, item_from_filter
 
 
 class Tile(NamedTuple):
@@ -43,7 +44,7 @@ class TiledRoiDataset(Dataset):
                 func=lambda x: x,
             )
             if (
-                len(t.graph_filter_wo_overlap.node_ids()) > 0  # removing empty tiles
+                len(t.graph_filter_wo_overlap.edge_ids()) > 0  # removing empty tiles
                 and t.slicing[0].start >= min_t
                 and t.slicing[0].stop <= max_t
             )
@@ -84,8 +85,26 @@ class TiledRoiDataset(Dataset):
         if self._sp_filter is None:
             self._sp_filter = self._graph.spatial_filter()
         return self._sp_filter
-    
+
     def __getitem__(self, index: int) -> DataItem:
         tile = self._tiles[index]
         sp_filter = self.sp_filter[tile.slicing]
-        return item_from_filter(sp_filter, self._spatial_cols, self._properties, self._df_transforms, self._dict_transforms)
+        data = item_from_filter(
+            sp_filter, self._spatial_cols, self._properties, self._df_transforms, self._dict_transforms
+        )
+        sp_filter_wo_overlap: RXFilter = self.sp_filter[tile.slicing_wo_overlap]
+        for out_key, all_idx, inner_idx in [
+            (
+                DataKeys.NODE_WITHIN_TILE,
+                data[DataKeys.NODE_ID],
+                sp_filter_wo_overlap.node_ids(),
+            ),
+            (
+                DataKeys.EDGE_WITHIN_TILE,
+                data[DataKeys.EDGE_ID],
+                sp_filter_wo_overlap.edge_ids(),
+            ),
+        ]:
+            data[out_key] = torch.isin(all_idx, inner_idx)
+
+        return data
