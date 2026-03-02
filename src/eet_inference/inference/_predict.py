@@ -1,7 +1,11 @@
 """Model prediction and inference utilities for EET."""
 
+import os
 from contextlib import nullcontext
 from typing import NamedTuple
+
+# this is to avoid OOM errors when using large tiling schemes
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"  # type: ignore
 
 import polars as pl
 import torch
