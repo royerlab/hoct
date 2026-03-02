@@ -34,7 +34,7 @@ dependencies = [
     "pyyaml>=6.0.3",
     "typer>=0.21.1",
     "rich>=14.3.1",
-    "dask>=2026.1.1",
+    "dask",
     "gurobipy>12.0.1,<13.0.0",
 ]
 
@@ -45,9 +45,6 @@ dev = [
     "ruff>=0.1.0",
     "pre-commit>=3.5.0",
 ]
-
-[tool.uv.sources]
-eet-features = { workspace = true }
 
 [project.scripts]
 eet-inference = "eet_inference.cli:main"
