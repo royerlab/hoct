@@ -5,10 +5,10 @@ Tests focus on important behavioral aspects of graph creation API.
 
 import numpy as np
 import pytest
-
-from eet_features.graph import create_graph
-from eet_inference.tracking import ILPSolverConfig
 from eet_features.constants import REGIONPROPS
+from eet_features.graph import create_graph
+
+from eet_inference.tracking import ILPSolverConfig
 
 
 @pytest.fixture
@@ -83,8 +83,8 @@ class TestCreateGraphFromLabels:
             delta_t=3,
         )
 
-        assert graph_2d.metadata()["was_2d"] is True
-        assert graph_3d.metadata()["was_2d"] is False
+        assert graph_2d.metadata["was_2d"] is True
+        assert graph_3d.metadata["was_2d"] is False
 
     def test_inference_mode_no_gt_features(self, synthetic_2d_labels):
         """Test that GT features are not added in inference mode."""
@@ -107,15 +107,15 @@ class TestSolverConfig:
         """Test that config cannot be modified after creation."""
         config = ILPSolverConfig.default()
 
-        with pytest.raises(Exception):
+        with pytest.raises(Exception):  # noqa: B017
             config.appearance_weight = 2.0
 
     def test_config_validates_negative_weights(self):
         """Test that negative weights are rejected."""
-        with pytest.raises(Exception):
+        with pytest.raises(Exception):  # noqa: B017
             ILPSolverConfig(appearance_weight=-1.0)
 
     def test_config_validates_zero_timeout(self):
         """Test that zero/negative timeout is rejected."""
-        with pytest.raises(Exception):
+        with pytest.raises(Exception):  # noqa: B017
             ILPSolverConfig(timeout=0.0)
