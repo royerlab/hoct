@@ -144,8 +144,7 @@ class TestSolveTracking:
         graph = prepare_graph_for_tracking(graph)
 
         # Set no_division metadata by updating the metadata dictionary
-        metadata = graph.metadata()
-        metadata["no_division"] = True
+        graph.metadata["no_division"] = True
 
         # Solve tracking
         config = ILPSolverConfig(
