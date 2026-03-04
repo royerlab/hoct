@@ -128,8 +128,8 @@ def solve_tracking(
     not_first_frame = td.NodeAttr(td.DEFAULT_ATTR_KEYS.T) != td.NodeAttr(td.DEFAULT_ATTR_KEYS.T).min()
     not_last_frame = td.NodeAttr(td.DEFAULT_ATTR_KEYS.T) != td.NodeAttr(td.DEFAULT_ATTR_KEYS.T).max()
 
-    LOG.info("Metadata: %s", graph.metadata())
-    no_division = graph.metadata().get("no_division", False)
+    LOG.info("Metadata: %s", graph.metadata)
+    no_division = graph.metadata.get("no_division", False)
 
     kwargs = {
         "appearance_weight": config.appearance_weight * (1 - td.NodeAttr("orphan_prob")) * not_first_frame,
