@@ -152,7 +152,7 @@ class TrackletSolver(ILPSolver):
 
         tracklet_graph.add_edge_attr_key("edge_weight", pl.Float32, 0.0)
         tracklet_graph.add_edge_attr_key(td.DEFAULT_ATTR_KEYS.SOLUTION, pl.Boolean, False)
-        tracklet_graph.add_edge_attr_key("delta_t", pl.Float32, -1.0)
+        tracklet_graph.add_edge_attr_key("delta_t", pl.Int32, -1)
         tracklet_graph.bulk_add_edges(
             list(tracklet_edges_df.iter_rows(named=True)),
         )

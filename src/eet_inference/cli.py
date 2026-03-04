@@ -2,10 +2,11 @@
 
 import shutil
 from pathlib import Path
-from typing import Optional
 
-import tracksdata as td
+import numpy as np
+import polars as pl
 import torch
+import tracksdata as td
 import typer
 import yaml
 from rich.console import Console
@@ -15,6 +16,16 @@ from eet_inference import __version__
 from eet_inference.data import FrameDataset
 from eet_inference.inference import model_predict
 from eet_inference.tracking import ILPSolverConfig
+
+
+def _fix_inertia_tensor(graph: td.graph.BaseGraph) -> None:
+    # temporary workaround to fix inertia tensor dtype
+    graph._node_attr_schemas()["inertia_tensor"] = td.utils._dtypes.AttrSchema(
+        "inertia_tensor",
+        pl.Array(pl.Float32, (3, 3)),
+        np.zeros((3, 3), dtype=np.float32),
+    )
+
 
 app = typer.Typer(
     name="eet-inference",
@@ -37,8 +48,10 @@ def predict(
     geff_path: Path = typer.Argument(..., help="Path to GEFF directory", exists=True, dir_okay=True, file_okay=False),
     model_path: Path = typer.Argument(..., help="Path to PyTorch model checkpoint", exists=True, dir_okay=False),
     output: Path = typer.Option(..., "--output", "-o", help="Output GEFF directory (default: overwrite input)"),
-    solution: bool = typer.Option(False, "--solution", "-s", help="Save solution graph rather the full graph with probabilities"),
-    config_path: Optional[Path] = typer.Option(
+    solution: bool = typer.Option(
+        False, "--solution", "-s", help="Save solution graph rather the full graph with probabilities"
+    ),
+    config_path: Path | None = typer.Option(
         None, "--config", "-c", help="Path to ILP solver config YAML file", exists=True, dir_okay=False
     ),
     overwrite: bool = typer.Option(False, "--overwrite", "-ow", help="Overwrite output directory"),
@@ -87,6 +100,8 @@ def predict(
         "border_dist",
     ]
 
+    _fix_inertia_tensor(graph)
+
     # Load dataset
     ds = FrameDataset(
         graph=graph,
@@ -94,7 +109,9 @@ def predict(
         min_window_size=window_size,
     )
     console.print(f"Dataset: {ds.graph.num_nodes()} nodes, {ds.graph.num_edges()} edges")
-    console.print(f"Time frames: {ds.graph.node_attrs(attr_keys=['t'])['t'].min()} - {ds.graph.node_attrs(attr_keys=['t'])['t'].max()}")
+
+    time_points = ds.graph.time_points()
+    console.print(f"Time frames: {min(time_points)} - {max(time_points)}")
 
     # Load model
     console.print(f"\nLoading model from: {model_path}")
@@ -147,27 +164,6 @@ def init_config(
     default_config = ILPSolverConfig.default()
     config_dict = default_config.model_dump()
 
-    # Add comments as a separate structure
-    config_with_comments = {
-        "# Configuration for ILP tracking solver": None,
-        "# Weight for appearance edges (nodes appearing or orphans)": None,
-        "appearance_weight": config_dict["appearance_weight"],
-        "# Weight for disappearance edges": None,
-        "disappearance_weight": config_dict["disappearance_weight"],
-        "# Weight for cell division edges (set to 1e6 to disable divisions)": None,
-        "division_weight": config_dict["division_weight"],
-        "# Weight for node selection": None,
-        "node_weight": config_dict["node_weight"],
-        "# Penalty for edges spanning multiple frames": None,
-        "delta_t_weight": config_dict["delta_t_weight"],
-        "# Bias added to edge weights": None,
-        "edge_bias": config_dict["edge_bias"],
-        "# Solver timeout in seconds": None,
-        "timeout": config_dict["timeout"],
-        "# Use two-pass tracklet solver": None,
-        "tracklet_solver": config_dict["tracklet_solver"],
-    }
-
     # Write YAML with comments
     with open(output, "w") as f:
         yaml.dump(config_dict, f, default_flow_style=False, sort_keys=False)
@@ -178,7 +174,7 @@ def init_config(
 
 @app.callback()
 def main(
-    version: Optional[bool] = typer.Option(
+    version: bool | None = typer.Option(
         None, "--version", "-v", callback=version_callback, is_eager=True, help="Show version and exit"
     ),
 ):

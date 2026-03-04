@@ -84,6 +84,7 @@ select = [
 
 [tool.ruff.lint.per-file-ignores]
 "_tests/*.py" = ["D", "S"]
+"src/eet_inference/cli.py" = ["B008"]
 
 # https://docs.astral.sh/ruff/formatter/
 [tool.ruff.format]
