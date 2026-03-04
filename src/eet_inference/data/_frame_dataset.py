@@ -33,9 +33,9 @@ class FrameDataset(Dataset):
         # Calculate window size from max delta_t in edges
         max_delta_t = self._graph.edge_attrs(attr_keys=["delta_t"])["delta_t"].max()
         if min_window_size is not None:
-            self.window_size = max(max_delta_t, min_window_size)
+            self.window_size = int(max(max_delta_t, min_window_size))
         else:
-            self.window_size = max_delta_t
+            self.window_size = int(max_delta_t)
 
         time_pts = self._graph.time_points()
 
