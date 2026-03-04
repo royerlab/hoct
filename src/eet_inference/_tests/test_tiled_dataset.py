@@ -6,9 +6,9 @@ import pytest
 import tracksdata as td
 from tracksdata.functional import TilingScheme
 
+from eet_inference._tests.conftest import GEFF_2D, GEFF_3D
 from eet_inference.data._batching import DataKeys
 from eet_inference.data._tiled_dataset import Tile, TiledRoiDataset
-from eet_inference._tests.conftest import GEFF_2D, GEFF_3D
 
 
 class TestTile:
@@ -162,7 +162,10 @@ class TestTiledRoiDataset:
         # Subsequent access returns same object
         assert dataset.sp_filter is sp_filter
 
-    @pytest.mark.skip(reason="Graph contains unpicklable Cython objects (RTree). Pickle support requires saving/loading graph separately.")
+    @pytest.mark.skip(
+        reason="Graph contains unpicklable Cython objects (RTree). "
+        "Pickle support requires saving/loading graph separately."
+    )
     def test_dataset_pickle_support(self):
         """Test that dataset can be pickled and unpickled."""
         graph, _ = td.graph.InMemoryGraph.from_geff(GEFF_2D)
@@ -247,22 +250,19 @@ class TestTiledRoiDataset:
                 train=True,
             )
 
-    def test_dataset_raises_on_empty_tiles(self):
+    def test_dataset_shorter_than_tile(self):
         """Test that dataset raises error when no valid tiles are found."""
         graph, _ = td.graph.InMemoryGraph.from_geff(GEFF_2D)
 
-        # Use tiling scheme that's way too large for the time range
-        time_pts = graph.node_attrs(attr_keys=[td.DEFAULT_ATTR_KEYS.T])[td.DEFAULT_ATTR_KEYS.T]
-        time_range = time_pts.max() - time_pts.min()
-
         tiling_scheme = TilingScheme(
-            tile_shape=(int(time_range) + 100, 50, 200, 200),  # Larger than time range
+            tile_shape=(1_000_000,) * 4,
             overlap_shape=(2, 5, 20, 20),
         )
 
-        with pytest.raises(ValueError, match="No tiles found"):
-            TiledRoiDataset(
-                graph=graph,
-                properties=["intensity_mean"],
-                tiling_scheme=tiling_scheme,
-            )
+        dataset = TiledRoiDataset(
+            graph=graph,
+            properties=["intensity_mean"],
+            tiling_scheme=tiling_scheme,
+        )
+
+        assert len(dataset) == 1

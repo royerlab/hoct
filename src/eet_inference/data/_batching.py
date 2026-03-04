@@ -102,6 +102,12 @@ def item_from_filter(
         attrs.append("is_div")
 
     node_attrs = sp_filter.node_attrs(attr_keys=attrs)
+    if "inertia_tensor" in node_attrs.columns:
+        # FIXME: this might be unnecessary in the future
+        node_attrs = node_attrs.with_columns(
+            pl.col("inertia_tensor").cast(pl.Array(pl.Float32, (3, 3))).alias("inertia_tensor"),
+        )
+
     # TODO: crop transform could be optimized and applied during slicing
     for transform in df_transforms:
         LOG.info("applying attr transform %s", transform)
