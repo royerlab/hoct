@@ -110,7 +110,7 @@ def item_from_filter(
 
     # TODO: crop transform could be optimized and applied during slicing
     for transform in df_transforms:
-        LOG.info("applying attr transform %s", transform)
+        LOG.debug("applying attr transform %s", transform)
         node_attrs = transform(node_attrs)
 
     edge_attrs = sp_filter.edge_attrs()
@@ -138,10 +138,10 @@ def item_from_filter(
     data[DataKeys.EDGE_ID] = edge_attrs[td.DEFAULT_ATTR_KEYS.EDGE_ID].to_torch()
     data[DataKeys.EDGE_BATCH_ID] = edge_attrs.select("batch_source", "batch_target").to_torch(dtype=pl.Int64)
 
-    if LOG.isEnabledFor(logging.INFO):
-        LOG.info("roi node time points: %s", node_attrs[td.DEFAULT_ATTR_KEYS.T].unique().to_list())
-        LOG.info("roi node shape: %s", node_attrs.shape)
-        LOG.info("roi node attributes: %s", node_attrs.columns)
+    if LOG.isEnabledFor(logging.DEBUG):
+        LOG.debug("roi node time points: %s", node_attrs[td.DEFAULT_ATTR_KEYS.T].unique().to_list())
+        LOG.debug("roi node shape: %s", node_attrs.shape)
+        LOG.debug("roi node attributes: %s", node_attrs.columns)
 
     if "edge_is_gt" in edge_attrs.columns:
         data[DataKeys.EDGE_TARGETS] = edge_attrs["edge_is_gt"].to_torch()[:, None]
@@ -203,7 +203,7 @@ def item_from_filter(
     data[DataKeys.NODE_FEATS] = node_attrs.to_torch(dtype=pl.Float32)
 
     for transform in dict_transforms:
-        LOG.info("applying dict transform %s", transform)
+        LOG.debug("applying dict transform %s", transform)
         data = transform(data)
 
     return DataItem(**data)
