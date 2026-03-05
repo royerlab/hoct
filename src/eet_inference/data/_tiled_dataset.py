@@ -8,6 +8,7 @@ from tracksdata.functional import TilingScheme, apply_tiled
 from tracksdata.graph._rustworkx_graph import RXFilter
 
 from eet_inference.data._batching import DataItem, item_from_filter
+from eet_inference.data._transforms import Translate
 
 
 class Tile(NamedTuple):
@@ -84,6 +85,11 @@ class TiledRoiDataset(Dataset):
     def __getitem__(self, index: int) -> DataItem:
         tile = self._tiles[index]
         sp_filter = self.sp_filter[tile.slicing]
-        return item_from_filter(
-            sp_filter, self._spatial_cols, self._properties, self._df_transforms, self._dict_transforms
-        )
+        df_transforms = [
+            Translate(
+                values=[-s.start for s in tile.slicing[1:]],  # skipping time
+                columns=self._spatial_cols,
+            ),
+            *self._df_transforms,
+        ]
+        return item_from_filter(sp_filter, self._spatial_cols, self._properties, df_transforms, self._dict_transforms)
