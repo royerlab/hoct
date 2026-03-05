@@ -47,6 +47,18 @@ class Flip(BaseTransform):
         return f"Flip(p={self._p}, columns={self._columns})"
 
 
+class Translate(BaseTransform):
+    def __init__(self, values: list[int | float], columns: Sequence[str]):
+        self._values = values
+        self._columns = columns
+
+    def __call__(self, df: pl.DataFrame) -> pl.DataFrame:
+        return df.with_columns(*[(pl.col(c) + v).alias(c) for v, c in zip(self._values, self._columns, strict=True)])
+
+    def __repr__(self) -> str:
+        return f"Translate(values={self._values}, columns={self._columns})"
+
+
 class Affine(BaseTransform):
     # Reference: https://github.com/weigertlab/trackastra/blob/00c419cf031f266b2d501e656b607416a8acfa46/trackastra/data/wrfeat.py#L388
     _ignored = (
