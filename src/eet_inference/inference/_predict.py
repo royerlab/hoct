@@ -278,7 +278,7 @@ def model_predict(
     node_df = node_df.with_columns(pl.col(pl.Float64, pl.Float32).fill_null(0.0))
     node_df = node_df.with_columns(
         (pl.col("orphan_exp") / (pl.col("denom") + pl.col("orphan_exp"))).fill_nan(0.0).alias("orphan_prob"),
-        (pl.col("delta_t").max().over(DataKeys.NODE_ID) - pl.col("delta_t") + 1).alias("delta_t_weighted"),
+        (-solver_config.delta_t_weight * (pl.col("delta_t").abs() - 1)).exp().alias("delta_t_weighted"),
     )
 
     # Weighted average over all delta_t (give more weight to smaller delta_t)
@@ -300,7 +300,7 @@ def model_predict(
     )
 
     if "orphan_prob" not in ds.graph.node_attr_keys():
-        ds.graph.add_node_attr_key("orphan_prob", pl.Float32, 1.0)
+        ds.graph.add_node_attr_key("orphan_prob", pl.Float32, 0.0)
 
     ds.graph.update_node_attrs(
         attrs={
