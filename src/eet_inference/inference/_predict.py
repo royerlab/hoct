@@ -167,7 +167,8 @@ def model_predict(
             return tensor.to(device)
 
     # disabling recompilation
-    torch._C._jit_set_bailout_depth(0)
+    # torch._C._jit_set_bailout_depth(0)
+    torch.jit.set_fusion_strategy([])
 
     # Run model inference
     with (
@@ -176,6 +177,9 @@ def model_predict(
         else nullcontext()
     ):
         for batch in _ds_iterator():
+            if batch is None:
+                continue
+
             input_batch = _expand_dims(batch[DataKeys.NODE_FEATS])
             edges = _expand_dims(batch[DataKeys.EDGE_BATCH_ID])
             node_mask = _expand_dims(batch.get(DataKeys.NODE_MASK, None))
@@ -185,6 +189,10 @@ def model_predict(
             d_t = _expand_dims(batch[DataKeys.DELTA_T])
             node_pos = _expand_dims(batch[DataKeys.NODE_POS])
             edge_pos = _expand_dims(batch[DataKeys.EDGE_POS])
+
+            # e_id.shape[1] is the number of edges in the batch
+            if e_id.shape[1] <= 1 or (edge_mask is not None and edge_mask.sum() == 0):
+                continue
 
             if node_mask is None:
                 node_mask = torch.ones(input_batch.shape[:2], dtype=torch.bool, device=device)
