@@ -11,6 +11,7 @@ import polars as pl
 import torch
 import tracksdata as td
 from torch.utils.data import DataLoader
+from tqdm import tqdm
 
 from eet_inference._logging import LOG
 from eet_inference.data import DataKeys, FrameDataset, TiledRoiDataset
@@ -148,7 +149,7 @@ def model_predict(
     if not isinstance(ds, DataLoader):
 
         def _ds_iterator():
-            for i in range(len(ds)):
+            for i in tqdm(range(len(ds)), desc="Model inference"):
                 yield ds[i]
 
         def _expand_dims(tensor: torch.Tensor | None) -> torch.Tensor | None:
@@ -167,8 +168,8 @@ def model_predict(
             return tensor.to(device)
 
     # disabling recompilation
-    # torch._C._jit_set_bailout_depth(0)
-    torch.jit.set_fusion_strategy([])
+    torch._C._jit_set_bailout_depth(0)
+    # torch.jit.set_fusion_strategy([])  # this doesn't work
 
     # Run model inference
     with (
