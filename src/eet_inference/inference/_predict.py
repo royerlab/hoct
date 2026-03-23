@@ -11,6 +11,7 @@ import polars as pl
 import torch
 import tracksdata as td
 from torch.utils.data import DataLoader
+from tqdm import tqdm
 
 from eet_inference._logging import LOG
 from eet_inference.data import DataKeys, FrameDataset, TiledRoiDataset
@@ -151,7 +152,7 @@ def model_predict(
     if not isinstance(ds, DataLoader):
 
         def _ds_iterator():
-            for i in range(len(ds)):
+            for i in tqdm(range(len(ds)), desc="Model inference"):
                 yield ds[i]
 
         def _expand_dims(tensor: torch.Tensor | None) -> torch.Tensor | None:
@@ -171,6 +172,7 @@ def model_predict(
 
     # disabling recompilation
     torch._C._jit_set_bailout_depth(0)
+    # torch.jit.set_fusion_strategy([])  # this doesn't work
 
     LOG.info("Starting model inference loop")
     # Run model inference
@@ -182,6 +184,10 @@ def model_predict(
         batch_idx = 0
         for batch in _ds_iterator():
             LOG.debug("Processing batch %d", batch_idx)
+            if batch is None:
+                LOG.debug("Batch %d is None, skipping", batch_idx)
+                continue
+
             input_batch = _expand_dims(batch[DataKeys.NODE_FEATS])
             edges = _expand_dims(batch[DataKeys.EDGE_BATCH_ID])
             node_mask = _expand_dims(batch.get(DataKeys.NODE_MASK, None))
@@ -191,6 +197,10 @@ def model_predict(
             d_t = _expand_dims(batch[DataKeys.DELTA_T])
             node_pos = _expand_dims(batch[DataKeys.NODE_POS])
             edge_pos = _expand_dims(batch[DataKeys.EDGE_POS])
+
+            # e_id.shape[1] is the number of edges in the batch
+            if e_id.shape[1] <= 1 or (edge_mask is not None and edge_mask.sum() == 0):
+                continue
 
             if node_mask is None:
                 node_mask = torch.ones(input_batch.shape[:2], dtype=torch.bool, device=device)
@@ -297,7 +307,7 @@ def model_predict(
     node_df = node_df.with_columns(pl.col(pl.Float64, pl.Float32).fill_null(0.0))
     node_df = node_df.with_columns(
         (pl.col("orphan_exp") / (pl.col("denom") + pl.col("orphan_exp"))).fill_nan(0.0).alias("orphan_prob"),
-        (pl.col("delta_t").max().over(DataKeys.NODE_ID) - pl.col("delta_t") + 1).alias("delta_t_weighted"),
+        (-solver_config.delta_t_weight * (pl.col("delta_t").abs() - 1)).exp().alias("delta_t_weighted"),
     )
 
     # Weighted average over all delta_t (give more weight to smaller delta_t)
@@ -321,7 +331,7 @@ def model_predict(
     )
 
     if "orphan_prob" not in ds.graph.node_attr_keys():
-        ds.graph.add_node_attr_key("orphan_prob", pl.Float32, 1.0)
+        ds.graph.add_node_attr_key("orphan_prob", pl.Float32, 0.0)
 
     ds.graph.update_node_attrs(
         attrs={
