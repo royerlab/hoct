@@ -87,7 +87,8 @@ class ILPSolverConfig(BaseModel):
 def solve_tracking(
     graph: td.graph.BaseGraph,
     config: ILPSolverConfig,
-) -> td.graph.InMemoryGraph:
+    return_solution: bool = True,
+) -> td.graph.InMemoryGraph | None:
     """
     Solve the tracking problem using ILP optimization.
 
@@ -102,6 +103,8 @@ def solve_tracking(
         - 'orphan_prob' node attribute: orphan probabilities for nodes
     config : ILPSolverConfig
         Configuration parameters for the ILP solver (weights, timeout, etc.).
+    return_solution : bool
+        Whether to return the solution graph or not.
 
     Returns
     -------
@@ -115,10 +118,13 @@ def solve_tracking(
     - Appearance weights are modulated by orphan probabilities
     - If tracklet_solver=True, uses two-pass solving (tracklets then linkage)
     """
+    LOG.info("Starting solve_tracking")
     if td.DEFAULT_ATTR_KEYS.SOLUTION in graph.node_attr_keys():
+        LOG.debug("Resetting existing solution in graph")
         graph.update_node_attrs(attrs={td.DEFAULT_ATTR_KEYS.SOLUTION: False})
         graph.update_edge_attrs(attrs={td.DEFAULT_ATTR_KEYS.SOLUTION: False})
 
+    LOG.info("Computing edge weights and node filters")
     # Compute edge weights
     sim_weight = -td.EdgeAttr("similarity") + config.edge_bias
     delta_t_penalty = (-config.delta_t_weight * (td.EdgeAttr("delta_t").abs() - 1)).exp()
@@ -130,6 +136,7 @@ def solve_tracking(
 
     LOG.info("Metadata: %s", graph.metadata)
     no_division = graph.metadata.get("no_division", False)
+    LOG.info("Division mode: %s", "disabled" if no_division else "enabled")
 
     kwargs = {
         "appearance_weight": config.appearance_weight * (1 - td.NodeAttr("orphan_prob")) * not_first_frame,
@@ -138,23 +145,36 @@ def solve_tracking(
         "node_weight": config.node_weight,
         "timeout": config.timeout,
     }
+    LOG.debug("Solver weights configured: appearance=%.2f, disappearance=%.2f, division=%.2f, node=%.2f",
+              kwargs["appearance_weight"], kwargs["disappearance_weight"],
+              kwargs["division_weight"], kwargs["node_weight"])
 
     # Two-pass solving: first tracklets, then linkage
     if config.tracklet_solver:
+        LOG.info("Using two-pass tracklet solver")
+        LOG.info("Pass 1/2: Solving for tracklets (delta_t=1 only)")
         td.solvers.ILPSolver(
             edge_weight=-td.EdgeAttr("similarity") + config.edge_bias + (td.EdgeAttr("delta_t") > 1) * math.inf,
             **kwargs,
         ).solve(graph)
+        LOG.info("Pass 1/2: Tracklet solving completed")
 
+        LOG.info("Pass 2/2: Linking tracklets")
         solution_graph = TrackletSolver(
             edge_weight=edge_weight,
             **kwargs,
+            return_solution=return_solution,
         ).solve(graph)
+        LOG.info("Pass 2/2: Tracklet linking completed")
 
     else:
+        LOG.info("Using single-pass ILP solver")
         solution_graph = td.solvers.ILPSolver(
             edge_weight=edge_weight,
             **kwargs,
+            return_solution=return_solution,
         ).solve(graph)
+        LOG.info("Single-pass ILP solver completed")
 
+    LOG.info("solve_tracking completed successfully")
     return solution_graph

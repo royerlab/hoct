@@ -83,7 +83,8 @@ def model_predict(
     model: EdgeModel,
     ds: FrameDataset | TiledRoiDataset | DataLoader,
     solver_config: ILPSolverConfig | None = None,
-) -> td.graph.InMemoryGraph:
+    return_solution: bool = True,
+) -> td.graph.InMemoryGraph | None:
     """
     Run model prediction on a dataset and solve tracking.
 
@@ -130,10 +131,12 @@ def model_predict(
     ... )
     >>> model_predict(model, ds, solver_config=config)
     """
+    LOG.info("Starting model prediction pipeline")
     if solver_config is None:
         solver_config = ILPSolverConfig()
     model.eval()
     device = next(model.parameters()).device
+    LOG.info(f"Model loaded on device: {device}")
 
     if str(device) == "cpu":
         LOG.warning("Model is on CPU, use `cuda` or `mps` to speed up inference")
@@ -169,13 +172,16 @@ def model_predict(
     # disabling recompilation
     torch._C._jit_set_bailout_depth(0)
 
+    LOG.info("Starting model inference loop")
     # Run model inference
     with (
         torch.amp.autocast(device_type=device.type, dtype=torch.bfloat16)
         if torch.cuda.is_available()
         else nullcontext()
     ):
+        batch_idx = 0
         for batch in _ds_iterator():
+            LOG.debug("Processing batch %d", batch_idx)
             input_batch = _expand_dims(batch[DataKeys.NODE_FEATS])
             edges = _expand_dims(batch[DataKeys.EDGE_BATCH_ID])
             node_mask = _expand_dims(batch.get(DataKeys.NODE_MASK, None))
@@ -192,8 +198,10 @@ def model_predict(
             if edge_mask is None:
                 edge_mask = torch.ones(edges.shape[:2], dtype=torch.bool, device=device)
 
+            LOG.debug("Running model forward pass for batch %d", batch_idx)
             model_output = model.forward(input_batch, node_pos, edge_pos, edges, node_mask, edge_mask)
             pred, _, _, oph_logits = model_output
+            LOG.debug("Model forward pass completed for batch %d", batch_idx)
 
             if edge_mask is not None:
                 pred = pred[edge_mask]
@@ -210,13 +218,18 @@ def model_predict(
 
             orphan_exp.append(oph_logits.float().clamp(max=20).exp().cpu().ravel())
             node_ids.append(n_id.cpu().ravel())
+            LOG.debug("Batch %d processed successfully", batch_idx)
+            batch_idx += 1
 
+    LOG.info("Completed inference on %d batches", batch_idx)
+    LOG.info("Concatenating predictions")
     # Concatenate all predictions
     edge_ids = torch.cat(edge_ids, dim=0)
     sim_exp = torch.cat(sim_exp, dim=0)
     delta_t = torch.cat(delta_t, dim=0)
     node_ids = torch.cat(node_ids, dim=0)
     orphan_exp = torch.cat(orphan_exp, dim=0)
+    LOG.info("Concatenated predictions - edges: %d, nodes: %d", edge_ids.shape[0], node_ids.shape[0])
 
     # Validate shapes
     if edge_ids.shape != sim_exp.shape:
@@ -224,11 +237,13 @@ def model_predict(
 
     if edge_ids.shape != delta_t.shape:
         raise ValueError(f"'edge_ids' and 'delta_t' have different shapes: {edge_ids.shape} != {delta_t.shape}")
+    LOG.info("Shape validation passed")
 
     # Extract dataset from DataLoader if needed
     if isinstance(ds, DataLoader):
         ds = ds.dataset
 
+    LOG.info("Aggregating node predictions")
     # Aggregate node predictions (median over all windows)
     node_df = (
         pl.DataFrame(
@@ -240,7 +255,9 @@ def model_predict(
         .group_by(DataKeys.NODE_ID)
         .median()
     )
+    LOG.info("Node predictions aggregated: %d unique nodes", len(node_df))
 
+    LOG.info("Aggregating edge predictions")
     # Aggregate edge predictions (median similarity, first delta_t)
     edge_df = (
         pl.DataFrame(
@@ -253,7 +270,9 @@ def model_predict(
         .group_by(DataKeys.EDGE_ID)
         .agg(pl.col("sim_exp").median(), pl.col("delta_t").first())
     )
+    LOG.info("Edge predictions aggregated: %d unique edges", len(edge_df))
 
+    LOG.info("Computing parental softmax normalization")
     # Compute parental softmax normalization
     # Join edge data with source/target node IDs
     edge_df = edge_df.join(
@@ -287,7 +306,9 @@ def model_predict(
         .group_by(DataKeys.NODE_ID)
         .agg((pl.col("orphan_prob_weighted").sum() / pl.col("delta_t_weighted").sum()).alias("orphan_prob"))
     )
+    LOG.info("Parental softmax normalization completed")
 
+    LOG.info("Updating graph with predictions")
     # Update graph with predictions
     if "similarity" not in ds.graph.edge_attr_keys():
         ds.graph.add_edge_attr_key("similarity", pl.Float32, -1.0)
@@ -308,11 +329,15 @@ def model_predict(
         },
         node_ids=node_df[DataKeys.NODE_ID].to_list(),
     )
+    LOG.info("Graph updated with edge similarities and node orphan probabilities")
 
+    LOG.info("Starting ILP tracking solver")
     # Solve tracking
     solution_graph = solve_tracking(
         graph=ds.graph,
         config=solver_config,
+        return_solution=return_solution,
     )
+    LOG.info("Tracking solver completed successfully")
 
     return solution_graph
