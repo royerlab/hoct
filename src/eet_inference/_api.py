@@ -149,7 +149,8 @@ def predict(
     window_size: int = 5,
     tiling_scheme: TilingScheme | None = None,
     test_time_augs: int = 0,
-) -> td.graph.InMemoryGraph:
+    return_solution: bool = True,
+) -> td.graph.InMemoryGraph | None:
     """
     Run end-to-end cell tracking prediction from raw data.
 
@@ -186,6 +187,8 @@ def predict(
     test_time_augs : int, default=0
         Number of test time augmentations to apply. If 0, no augmentations are applied.
         If > 0, a random augmentation is applied for each augmentation.
+    return_solution : bool
+        Whether to return the solution graph or not.
 
     Returns
     -------
@@ -292,8 +295,9 @@ def predict(
         dataset = GraphConcatDataset([dataset] * test_time_augs)
 
     LOG.info("Running model inference and solving tracking")
-    solution_graph = model_predict(model, dataset, solver_config=solver_config)
+    solution_graph = model_predict(model, dataset, solver_config=solver_config, return_solution=return_solution)
 
-    LOG.info(f"Solution: {solution_graph.num_nodes()} nodes, {solution_graph.num_edges()} edges")
+    if solution_graph is not None:
+        LOG.info(f"Solution: {solution_graph.num_nodes()} nodes, {solution_graph.num_edges()} edges")
 
     return solution_graph

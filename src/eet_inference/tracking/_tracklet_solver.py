@@ -160,7 +160,7 @@ class TrackletSolver(ILPSolver):
         tracklet_graph.summary(attrs_stats=True)
 
         if LOG.isEnabledFor(logging.INFO):
-            summary = tracklet_graph.summary(attrs_stats=True, print_stats=False)
+            summary = tracklet_graph.summary(attrs_stats=True, print_summary=False)
             LOG.info(summary)
 
         return tracklet_graph
@@ -198,7 +198,7 @@ class TrackletSolver(ILPSolver):
             src, tgt = edge_attrs["source_end_node_id"], edge_attrs["target_start_node_id"]
             try:
                 edge_id = graph.edge_id(src, tgt)
-            except rx.NoEdgeBetweenNodes:
+            except (rx.NoEdgeBetweenNodes, ValueError):
                 new_edge_attrs = {
                     td.DEFAULT_ATTR_KEYS.SOLUTION: edge_attrs[td.DEFAULT_ATTR_KEYS.SOLUTION],
                     td.DEFAULT_ATTR_KEYS.MATCHED_EDGE_MASK: False,
