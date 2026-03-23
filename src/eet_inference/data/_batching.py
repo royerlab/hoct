@@ -108,6 +108,9 @@ def item_from_filter(
             pl.col("inertia_tensor").cast(pl.Array(pl.Float32, (3, 3))).alias("inertia_tensor"),
         )
 
+    if node_attrs.shape[0] == 0:
+        return None
+
     # TODO: crop transform could be optimized and applied during slicing
     for transform in df_transforms:
         LOG.debug("applying attr transform %s", transform)
@@ -269,6 +272,8 @@ def collate_varying_length(
     dict[str, torch.Tensor | td.graph.InMemoryGraph]
         The collated dictionary.
     """
+    # removing empty batches
+    batches = [b for b in batches if b is not None]
 
     keys = list(batches[0].keys())
 
