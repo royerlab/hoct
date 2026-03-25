@@ -179,7 +179,7 @@ def model_predict(
     device = next(model.parameters()).device
     LOG.info(f"Model loaded on device: {device}")
 
-    if str(device) == "cpu":
+    if device.type == "cpu":
         LOG.warning("Model is on CPU, use `cuda` or `mps` to speed up inference")
 
     edge_ids = []
