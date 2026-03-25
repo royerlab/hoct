@@ -1,7 +1,8 @@
 """Model prediction and inference utilities for EET."""
 
 import os
-from contextlib import nullcontext
+from collections.abc import Callable, Iterator
+from contextlib import AbstractContextManager, nullcontext
 from typing import NamedTuple
 
 # this is to avoid OOM errors when using large tiling schemes
@@ -79,6 +80,42 @@ class EdgeModel(torch.nn.Module):
         ...
 
 
+def _make_iterator(
+    ds: FrameDataset | TiledRoiDataset | DataLoader,
+    device: torch.device,
+) -> tuple[Callable[[], Iterator], Callable[[torch.Tensor | None], torch.Tensor | None]]:
+    """Return (iterator_fn, expand_dims_fn) adapted for Dataset or DataLoader input."""
+    if not isinstance(ds, DataLoader):
+
+        def _ds_iterator() -> Iterator:
+            for i in tqdm(range(len(ds)), desc="Model inference"):
+                yield ds[i]
+
+        def _expand_dims(tensor: torch.Tensor | None) -> torch.Tensor | None:
+            if tensor is None:
+                return None
+            return tensor.unsqueeze(0).to(device)
+
+    else:
+
+        def _ds_iterator() -> Iterator:
+            return ds
+
+        def _expand_dims(tensor: torch.Tensor | None) -> torch.Tensor | None:
+            if tensor is None:
+                return None
+            return tensor.to(device)
+
+    return _ds_iterator, _expand_dims
+
+
+def _autocast_ctx(device: torch.device) -> AbstractContextManager:
+    """Return bfloat16 autocast context for CUDA, or a no-op for other devices."""
+    if device.type == "cuda":
+        return torch.amp.autocast(device_type=device.type, dtype=torch.bfloat16)
+    return nullcontext()
+
+
 @torch.inference_mode()
 def model_predict(
     model: EdgeModel,
@@ -150,39 +187,14 @@ def model_predict(
     orphan_exp = []
     node_ids = []
 
-    # Handle both Dataset and DataLoader
-    if not isinstance(ds, DataLoader):
-
-        def _ds_iterator():
-            for i in tqdm(range(len(ds)), desc="Model inference"):
-                yield ds[i]
-
-        def _expand_dims(tensor: torch.Tensor | None) -> torch.Tensor | None:
-            if tensor is None:
-                return None
-            return tensor.unsqueeze(0).to(device)
-
-    else:
-
-        def _ds_iterator():
-            return ds
-
-        def _expand_dims(tensor: torch.Tensor | None) -> torch.Tensor | None:
-            if tensor is None:
-                return None
-            return tensor.to(device)
-
+    _ds_iterator, _expand_dims = _make_iterator(ds, device)
     # disabling recompilation
     torch._C._jit_set_bailout_depth(0)
     # torch.jit.set_fusion_strategy([])  # this doesn't work
 
     LOG.info("Starting model inference loop")
     # Run model inference
-    with (
-        torch.amp.autocast(device_type=device.type, dtype=torch.bfloat16)
-        if torch.cuda.is_available()
-        else nullcontext()
-    ):
+    with _autocast_ctx(device):
         batch_idx = 0
         for batch in _ds_iterator():
             LOG.debug("Processing batch %d", batch_idx)
@@ -380,28 +392,7 @@ def model_feature_predict(
     device = next(model.parameters()).device
     LOG.info("Model loaded on device: %s", device)
 
-    # Handle both Dataset and DataLoader
-    if not isinstance(ds, DataLoader):
-
-        def _ds_iterator():
-            for i in tqdm(range(len(ds)), desc="Model inference"):
-                yield ds[i]
-
-        def _expand_dims(tensor: torch.Tensor | None) -> torch.Tensor | None:
-            if tensor is None:
-                return None
-            return tensor.unsqueeze(0).to(device)
-
-    else:
-
-        def _ds_iterator():
-            return ds
-
-        def _expand_dims(tensor: torch.Tensor | None) -> torch.Tensor | None:
-            if tensor is None:
-                return None
-            return tensor.to(device)
-
+    _ds_iterator, _expand_dims = _make_iterator(ds, device)
     # disabling recompilation
     torch._C._jit_set_bailout_depth(0)
     # torch.jit.set_fusion_strategy([])  # this doesn't work
@@ -411,11 +402,7 @@ def model_feature_predict(
     edge_features = []
 
     # Run model inference
-    with (
-        torch.amp.autocast(device_type=device.type, dtype=torch.bfloat16)
-        if torch.cuda.is_available()
-        else nullcontext()
-    ):
+    with _autocast_ctx(device):
         batch_idx = 0
         for batch in _ds_iterator():
             LOG.debug("Processing batch %d", batch_idx)
