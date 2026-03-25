@@ -7,12 +7,12 @@ import tracksdata as td
 from torch import nn
 from tracksdata.functional import TilingScheme
 
-__all__ = ["ProbedModel", "fit_from_labels", "label_edge"]
-
 from eet_inference._api import _create_dataset
 from eet_inference._logging import LOG
 from eet_inference.data import LabeledDataset
-from eet_inference.inference._predict import EdgeModel, ModelPrediction, extract_edge_features
+from eet_inference.inference import EdgeModel, ModelPrediction, extract_edge_features
+
+__all__ = ["ProbedModel", "fit_from_labels", "label_edge"]
 
 
 def label_edge(
