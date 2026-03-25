@@ -367,7 +367,7 @@ def model_predict(
     return solution_graph
 
 
-def model_feature_predict(
+def extract_edge_features(
     model: EdgeModel,
     ds: FrameDataset | TiledRoiDataset | DataLoader,
     edge_filter_key: str | None = None,
