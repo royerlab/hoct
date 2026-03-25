@@ -104,6 +104,8 @@ def model_predict(
     solver_config : ILPSolverConfig | None, default=None
         Configuration for the ILP tracking solver. If None, uses default configuration.
         See ILPSolverConfig for available parameters (weights, timeout, etc.).
+    return_solution : bool
+        Whether to return the solution graph or not.
 
     Notes
     -----
@@ -351,3 +353,121 @@ def model_predict(
     LOG.info("Tracking solver completed successfully")
 
     return solution_graph
+
+
+def model_feature_predict(
+    model: EdgeModel,
+    ds: FrameDataset | TiledRoiDataset | DataLoader,
+    edge_filter_key: str | None = None,
+) -> pl.DataFrame:
+    """
+    Run model feature extraction on a dataset.
+
+    Parameters
+    ----------
+    model : EdgeModel
+        The trained edge prediction model.
+    ds : FrameDataset | TiledRoiDataset | DataLoader
+        Dataset or DataLoader to run inference on.
+    edge_filter_key : str | None, default=None
+        Key used to select edges after model prediction.
+
+    Returns
+    -------
+    pl.DataFrame
+        DataFrame with model features for each edge and node.
+    """
+    device = next(model.parameters()).device
+    LOG.info("Model loaded on device: %s", device)
+
+    # Handle both Dataset and DataLoader
+    if not isinstance(ds, DataLoader):
+
+        def _ds_iterator():
+            for i in tqdm(range(len(ds)), desc="Model inference"):
+                yield ds[i]
+
+        def _expand_dims(tensor: torch.Tensor | None) -> torch.Tensor | None:
+            if tensor is None:
+                return None
+            return tensor.unsqueeze(0).to(device)
+
+    else:
+
+        def _ds_iterator():
+            return ds
+
+        def _expand_dims(tensor: torch.Tensor | None) -> torch.Tensor | None:
+            if tensor is None:
+                return None
+            return tensor.to(device)
+
+    # disabling recompilation
+    torch._C._jit_set_bailout_depth(0)
+    # torch.jit.set_fusion_strategy([])  # this doesn't work
+
+    LOG.info("Starting model inference loop")
+    edge_ids = []
+    edge_features = []
+
+    # Run model inference
+    with (
+        torch.amp.autocast(device_type=device.type, dtype=torch.bfloat16)
+        if torch.cuda.is_available()
+        else nullcontext()
+    ):
+        batch_idx = 0
+        for batch in _ds_iterator():
+            LOG.debug("Processing batch %d", batch_idx)
+            if batch is None:
+                LOG.debug("Batch %d is None, skipping", batch_idx)
+                continue
+
+            input_batch = _expand_dims(batch[DataKeys.NODE_FEATS])
+            edges = _expand_dims(batch[DataKeys.EDGE_BATCH_ID])
+            node_mask = _expand_dims(batch.get(DataKeys.NODE_MASK, None))
+            edge_mask = _expand_dims(batch.get(DataKeys.EDGE_MASK, None))
+            e_id = _expand_dims(batch[DataKeys.EDGE_ID])
+            node_pos = _expand_dims(batch[DataKeys.NODE_POS])
+            edge_pos = _expand_dims(batch[DataKeys.EDGE_POS])
+
+            # e_id.shape[1] is the number of edges in the batch
+            if e_id.shape[1] <= 1 or (edge_mask is not None and edge_mask.sum() == 0):
+                continue
+
+            if node_mask is None:
+                node_mask = torch.ones(input_batch.shape[:2], dtype=torch.bool, device=device)
+
+            if edge_mask is None:
+                edge_mask = torch.ones(edges.shape[:2], dtype=torch.bool, device=device)
+
+            LOG.debug("Running model forward pass for batch %d", batch_idx)
+            model_output = model.forward(input_batch, node_pos, edge_pos, edges, node_mask, edge_mask)
+            _, _, e_feats, _ = model_output
+            LOG.debug("Model forward pass completed for batch %d", batch_idx)
+
+            if edge_filter_key is not None:
+                edge_filter_mask = batch[edge_filter_key]
+                e_id = e_id[edge_filter_mask]
+                e_feats = e_feats[edge_filter_mask]
+                if edge_filter_mask.sum() == 0:
+                    raise ValueError(f"No edges found after filtering with key '{edge_filter_key}'")
+
+            edge_ids.append(e_id.cpu().ravel())
+            edge_features.append(e_feats.cpu())
+            batch_idx += 1
+
+    LOG.info("Completed inference on %d batches", batch_idx)
+    LOG.info("Concatenating predictions")
+    edge_ids = torch.cat(edge_ids, dim=0)
+    edge_features = torch.cat(edge_features, dim=0)
+    LOG.info("Concatenated predictions - edges: %d", edge_ids.shape[0])
+
+    edge_df = pl.DataFrame(
+        {
+            DataKeys.EDGE_ID: edge_ids,
+            "edge_features": edge_features,
+        }
+    )
+
+    return edge_df

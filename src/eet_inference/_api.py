@@ -135,6 +135,68 @@ def create_graph_from_points(
     pass
 
 
+def _create_dataset(
+    graph: td.graph.BaseGraph,
+    tiling_scheme: TilingScheme | None = None,
+    window_size: int = 5,
+    test_time_augs: int = 0,
+) -> FrameDataset | TiledRoiDataset | GraphConcatDataset:
+    """
+    Create a dataset from a graph.
+
+    Parameters
+    ----------
+    graph : td.graph.BaseGraph
+        The graph to create the dataset from.
+    tiling_scheme : TilingScheme | None, default=None
+        The tiling scheme to use for the dataset.
+    window_size : int, default=5
+        The window size to use for the dataset.
+    test_time_augs : int, default=0
+        The number of test time augmentations to use for the dataset.
+
+    Returns
+    -------
+    FrameDataset | TiledRoiDataset | GraphConcatDataset
+        The created dataset.
+    """
+    if test_time_augs > 0:
+        df_transforms = [
+            Flip(columns=["z", "y", "x"], p=0.5),
+            Affine(
+                degree_range=(-180, 180),
+                scale_range=(1, 1),
+                shear_range=((0, 0), (0, 0)),
+            ),
+        ]
+    else:
+        df_transforms = []
+
+    if tiling_scheme is not None:
+        LOG.info("Creating tiled ROI dataset")
+        dataset = TiledRoiDataset(
+            graph=graph,
+            properties=REGIONPROPS,
+            tiling_scheme=tiling_scheme,
+            df_transforms=df_transforms,
+            dict_transforms=[Standardize(mean=_MEAN, std=_STD)],
+        )
+    else:
+        LOG.info("Creating frame dataset with window_size=%d", window_size)
+        dataset = FrameDataset(
+            graph=graph,
+            min_window_size=window_size,
+            properties=REGIONPROPS,
+            df_transforms=df_transforms,
+            dict_transforms=[Standardize(mean=_MEAN, std=_STD)],
+        )
+
+    if test_time_augs > 0:
+        dataset = GraphConcatDataset([dataset] * test_time_augs)
+
+    return dataset
+
+
 def predict(
     model: EdgeModel,
     *,
@@ -260,39 +322,7 @@ def predict(
 
     LOG.info(f"Created graph with {graph.num_nodes()} nodes and {graph.num_edges()} edges")
 
-    if test_time_augs > 0:
-        df_transforms = [
-            Flip(columns=["z", "y", "x"], p=0.5),
-            Affine(
-                degree_range=(-180, 180),
-                scale_range=(1, 1),
-                shear_range=((0, 0), (0, 0)),
-            ),
-        ]
-    else:
-        df_transforms = []
-
-    if tiling_scheme is not None:
-        LOG.info("Creating tiled ROI dataset")
-        dataset = TiledRoiDataset(
-            graph=graph,
-            properties=REGIONPROPS,
-            tiling_scheme=tiling_scheme,
-            df_transforms=df_transforms,
-            dict_transforms=[Standardize(mean=_MEAN, std=_STD)],
-        )
-    else:
-        LOG.info("Creating frame dataset with window_size=%d", window_size)
-        dataset = FrameDataset(
-            graph=graph,
-            min_window_size=window_size,
-            properties=REGIONPROPS,
-            df_transforms=df_transforms,
-            dict_transforms=[Standardize(mean=_MEAN, std=_STD)],
-        )
-
-    if test_time_augs > 0:
-        dataset = GraphConcatDataset([dataset] * test_time_augs)
+    dataset = _create_dataset(graph, tiling_scheme, window_size, test_time_augs)
 
     LOG.info("Running model inference and solving tracking")
     solution_graph = model_predict(model, dataset, solver_config=solver_config, return_solution=return_solution)

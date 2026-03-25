@@ -1,6 +1,7 @@
 import itertools
 from collections.abc import Callable, Sequence
 from pathlib import Path
+from typing import Any
 
 import polars as pl
 import tracksdata as td
@@ -70,6 +71,7 @@ class FrameDataset(Dataset):
     def __getitem__(
         self,
         index: int,
+        **kwargs: Any,
     ) -> DataItem:
         t = index + self._time_range[0]
         sp_filter = self.graph.filter(
@@ -85,6 +87,7 @@ class FrameDataset(Dataset):
             self._properties,
             self._df_transforms,
             self._dict_transforms,
+            **kwargs,
         )
         if index == 0 and self._return_graph:
             data[DataKeys.GRAPH] = self.graph
