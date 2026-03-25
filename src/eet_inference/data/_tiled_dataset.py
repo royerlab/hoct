@@ -1,5 +1,5 @@
 from collections.abc import Callable, Sequence
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 import polars as pl
 import tracksdata as td
@@ -82,7 +82,7 @@ class TiledRoiDataset(Dataset):
             self._sp_filter = self._graph.spatial_filter()
         return self._sp_filter
 
-    def __getitem__(self, index: int) -> DataItem:
+    def __getitem__(self, index: int, **kwargs: Any) -> DataItem:
         tile = self._tiles[index]
         sp_filter = self.sp_filter[tile.slicing]
         df_transforms = [
@@ -92,4 +92,6 @@ class TiledRoiDataset(Dataset):
             ),
             *self._df_transforms,
         ]
-        return item_from_filter(sp_filter, self._spatial_cols, self._properties, df_transforms, self._dict_transforms)
+        return item_from_filter(
+            sp_filter, self._spatial_cols, self._properties, df_transforms, self._dict_transforms, **kwargs
+        )

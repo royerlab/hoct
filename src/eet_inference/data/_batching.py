@@ -54,7 +54,7 @@ class DataItem(TypedDict):
     gt_graph: td.graph.InMemoryGraph | None
 
 
-_EDGE_KEYS = (
+_EDGE_KEYS = {
     DataKeys.EDGE_ID,
     DataKeys.EDGE_BATCH_ID,
     DataKeys.EDGE_TARGETS,
@@ -62,7 +62,7 @@ _EDGE_KEYS = (
     DataKeys.EDGE_IS_DIV,
     DataKeys.SOURCE_T,
     DataKeys.DELTA_T,
-)
+}
 
 
 def item_from_filter(
@@ -71,6 +71,7 @@ def item_from_filter(
     properties: list[str],
     df_transforms: list[Callable[[pl.DataFrame], pl.DataFrame]],
     dict_transforms: list[Callable[[DataItem], DataItem]],
+    extra_edge_attrs: list[str] = (),
 ) -> DataItem:
     """Load an item from a spatial filter.
 
@@ -86,6 +87,9 @@ def item_from_filter(
         The dataframe transforms.
     dict_transforms : list[Callable[[DataItem], DataItem]]
         The dictionary transforms.
+    extra_edge_attrs : list[str]
+        The extra edge attributes to load for additional edge attributes.
+        IMPORTANT: This modifies the global variable _EDGE_KEYS to identify edge attributes.
 
     Returns
     -------
@@ -145,6 +149,10 @@ def item_from_filter(
         LOG.debug("roi node time points: %s", node_attrs[td.DEFAULT_ATTR_KEYS.T].unique().to_list())
         LOG.debug("roi node shape: %s", node_attrs.shape)
         LOG.debug("roi node attributes: %s", node_attrs.columns)
+
+    for edge_attr in extra_edge_attrs:
+        _EDGE_KEYS.add(edge_attr)
+        data[edge_attr] = edge_attrs[edge_attr].to_torch()
 
     if "edge_is_gt" in edge_attrs.columns:
         data[DataKeys.EDGE_TARGETS] = edge_attrs["edge_is_gt"].to_torch()[:, None]
