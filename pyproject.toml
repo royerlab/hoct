@@ -39,7 +39,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-annotation = [
+correction = [
     "scikit-learn>=1.6.0",
 ]
 dev = [

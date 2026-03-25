@@ -18,20 +18,17 @@ class LabeledDataset(Dataset):
         The base dataset to wrap.
     label_mask_key : str
         Edge attribute key whose boolean values indicate which edges are labeled.
-    label_key : str
-        Edge attribute key holding the actual label values.
+        Items where no edge has this attribute set to True are skipped (return None).
     """
 
     def __init__(
         self,
         dataset: "FrameDataset | TiledRoiDataset | GraphConcatDataset",
         label_mask_key: str,
-        label_key: str,
     ):
         super().__init__()
         self._dataset = dataset
         self._label_mask_key = label_mask_key
-        self._label_key = label_key
 
     def __len__(self) -> int:
         return len(self._dataset)

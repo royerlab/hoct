@@ -7,6 +7,8 @@ import tracksdata as td
 from torch import nn
 from tracksdata.functional import TilingScheme
 
+__all__ = ["ProbedModel", "fit_from_labels", "label_edge"]
+
 from eet_inference._api import _create_dataset
 from eet_inference._logging import LOG
 from eet_inference.data import LabeledDataset
@@ -43,10 +45,18 @@ def label_edge(
     LOG.debug("Labeling edge %d -> %d: %s = %s", source_id, target_id, attr_key, value)
 
     if value:
-        edges = graph.filter(td.EdgeAttr(td.DEFAULT_ATTR_KEYS.EDGE_TARGET) == target_id).edge_attrs(
-            attr_keys=[td.DEFAULT_ATTR_KEYS.EDGE_ID, td.DEFAULT_ATTR_KEYS.EDGE_SOURCE]
+        # FIXME: this query needs to be optimized, we shouldn't need to load all edges
+        edges = (
+            graph.edge_attrs(
+                attr_keys=[
+                    td.DEFAULT_ATTR_KEYS.EDGE_ID,
+                    td.DEFAULT_ATTR_KEYS.EDGE_SOURCE,
+                    td.DEFAULT_ATTR_KEYS.EDGE_TARGET,
+                ]
+            )
+            .filter(pl.col(td.DEFAULT_ATTR_KEYS.EDGE_TARGET) == target_id)
+            .with_columns((pl.col(td.DEFAULT_ATTR_KEYS.EDGE_SOURCE) == source_id).alias(attr_key))
         )
-        edges = edges.with_columns((pl.col(td.DEFAULT_ATTR_KEYS.EDGE_SOURCE) == source_id).alias(attr_key))
         graph.update_edge_attrs(
             edge_ids=edges[td.DEFAULT_ATTR_KEYS.EDGE_ID].to_list(), attrs={attr_key: edges[attr_key].to_list()}
         )
@@ -69,17 +79,19 @@ class ProbedModel(EdgeModel):
     edge_model : EdgeModel
         The pretrained backbone model.
     coeffs : np.ndarray
-        Logistic regression coefficients of shape (1, hidden_size).
+        Logistic regression coefficients; any shape is accepted (raveled to 1D).
+        Typically ``linear_model.coef_[0]`` from a fitted sklearn LogisticRegression.
     bias : float
-        Logistic regression intercept.
+        Logistic regression intercept (scalar).
     """
 
     def __init__(self, edge_model: EdgeModel, coeffs: np.ndarray, bias: float) -> None:
         super().__init__()
         self._edge_model = edge_model
-        self._head = nn.Linear(len(coeffs), 1)
-        self._head.weight.data = torch.from_numpy(coeffs)
-        self._head.bias.data = torch.tensor(bias)
+        coeffs_1d = np.asarray(coeffs, dtype=np.float32).ravel()
+        self._head = nn.Linear(len(coeffs_1d), 1)
+        self._head.weight.data = torch.from_numpy(coeffs_1d).unsqueeze(0)
+        self._head.bias.data = torch.tensor([float(bias)])
 
     def forward(self, *args, **kwargs) -> ModelPrediction:
         prediction = self._edge_model(*args, **kwargs)
@@ -136,7 +148,7 @@ def fit_from_labels(
 
     device = next(model.parameters()).device
     dataset = _create_dataset(graph, tiling_scheme, window_size, test_time_augs)
-    labeled_dataset = LabeledDataset(dataset, label_mask_key, label_key)
+    labeled_dataset = LabeledDataset(dataset, label_mask_key)
     edge_features = extract_edge_features(model, labeled_dataset, edge_filter_key=label_mask_key)
     edge_attrs = graph.edge_attrs(attr_keys=[td.DEFAULT_ATTR_KEYS.EDGE_ID, label_mask_key, label_key]).filter(
         pl.col(label_mask_key)
@@ -155,7 +167,7 @@ def fit_from_labels(
     linear_model.fit(X, y)
     LOG.info("Logistic regression probe fitted")
 
-    probed_model = ProbedModel(model, linear_model.coef_, linear_model.intercept_)
+    probed_model = ProbedModel(model, linear_model.coef_[0], float(linear_model.intercept_[0]))
     probed_model.to(device)
 
     return probed_model

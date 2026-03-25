@@ -157,8 +157,9 @@ def model_predict(
     >>> from eet_inference.tracking import ILPSolverConfig
     >>>
     >>> # Load dataset and model
-    >>> ds = FrameDataset(graph_path="data.geff", window_size=3)
-    >>> model = EdgeModel.load("model.pt")
+    >>> graph, _ = td.graph.InMemoryGraph.from_geff("data.geff")
+    >>> ds = FrameDataset(graph=graph, min_window_size=3)
+    >>> model = torch.jit.load("model.pt")
     >>>
     >>> # Run inference with default config
     >>> model_predict(model, ds)
@@ -173,7 +174,7 @@ def model_predict(
     """
     LOG.info("Starting model prediction pipeline")
     if solver_config is None:
-        solver_config = ILPSolverConfig()
+        solver_config = ILPSolverConfig.default()
     model.eval()
     device = next(model.parameters()).device
     LOG.info(f"Model loaded on device: {device}")
@@ -227,18 +228,16 @@ def model_predict(
             pred, _, _, oph_logits = model_output
             LOG.debug("Model forward pass completed for batch %d", batch_idx)
 
-            if edge_mask is not None:
-                pred = pred[edge_mask]
-                e_id = e_id[edge_mask]
-                d_t = d_t[edge_mask]
+            pred = pred[edge_mask]
+            e_id = e_id[edge_mask]
+            d_t = d_t[edge_mask]
 
             edge_ids.append(e_id.cpu().ravel())
             sim_exp.append(pred.float().clamp(max=20).exp().cpu().ravel())
             delta_t.append(d_t.cpu().ravel())
 
-            if node_mask is not None:
-                oph_logits = oph_logits[node_mask]
-                n_id = n_id[node_mask]
+            oph_logits = oph_logits[node_mask]
+            n_id = n_id[node_mask]
 
             orphan_exp.append(oph_logits.float().clamp(max=20).exp().cpu().ravel())
             node_ids.append(n_id.cpu().ravel())
@@ -367,6 +366,7 @@ def model_predict(
     return solution_graph
 
 
+@torch.inference_mode()
 def extract_edge_features(
     model: EdgeModel,
     ds: FrameDataset | TiledRoiDataset | DataLoader,
@@ -434,11 +434,11 @@ def extract_edge_features(
             LOG.debug("Model forward pass completed for batch %d", batch_idx)
 
             if edge_filter_key is not None:
-                edge_filter_mask = batch[edge_filter_key]
-                e_id = e_id[edge_filter_mask]
-                e_feats = e_feats[edge_filter_mask]
+                edge_filter_mask = _expand_dims(batch[edge_filter_key].bool())
                 if edge_filter_mask.sum() == 0:
                     raise ValueError(f"No edges found after filtering with key '{edge_filter_key}'")
+                e_id = e_id[edge_filter_mask]
+                e_feats = e_feats[edge_filter_mask]
 
             edge_ids.append(e_id.cpu().ravel())
             edge_features.append(e_feats.cpu())

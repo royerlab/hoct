@@ -233,20 +233,20 @@ def predict(
         Optional intensity images of shape (T, [Z,] Y, X).
     solver_config : ILPSolverConfig | None, default=None
         Configuration for the ILP tracking solver. If None, uses defaults.
-    distance_threshold : float, default=200.0
+    distance_threshold : float
         Maximum distance for creating candidate edges.
-    n_neighbors : int, default=5
+    n_neighbors : int
         Maximum number of neighbors to connect per node.
-    max_delta_t : int, default=3
+    max_delta_t : int
         Maximum temporal gap for edges.
-    scale : tuple[float, ...] | None, default=None
+    scale : tuple[float, ...] | None
         Physical spacing (t, [z,] y, x). If None, uses isotropic spacing.
-    window_size : int, default=3
+    window_size : int
         Temporal window size for the frame dataset. Only used if tiling_scheme is None.
-    tiling_scheme : TilingScheme | None, default=None
+    tiling_scheme : TilingScheme | None
         Optional tiling scheme for spatially tiled inference. If provided, uses TiledRoiDataset
         instead of FrameDataset. Useful for large volumes that don't fit in memory.
-    test_time_augs : int, default=0
+    test_time_augs : int
         Number of test time augmentations to apply. If 0, no augmentations are applied.
         If > 0, a random augmentation is applied for each augmentation.
     return_solution : bool
