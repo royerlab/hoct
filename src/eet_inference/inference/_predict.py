@@ -391,6 +391,7 @@ def extract_edge_features(
     """
     device = next(model.parameters()).device
     LOG.info("Model loaded on device: %s", device)
+    model.eval()
 
     _ds_iterator, _expand_dims = _make_iterator(ds, device)
     # disabling recompilation
