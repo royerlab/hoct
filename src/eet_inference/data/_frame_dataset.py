@@ -1,3 +1,4 @@
+import bisect
 import itertools
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -162,6 +163,20 @@ class FrameDataset(Dataset):
 
 
 class GraphConcatDataset(ConcatDataset):
+    def __getitem__(self, idx: int, **kwargs: Any) -> DataItem:
+        # copied from ConcatDataset.__getitem__
+        if idx < 0:
+            if -idx > len(self):
+                raise ValueError("absolute value of index should not exceed dataset length")
+            idx = len(self) + idx
+        dataset_idx = bisect.bisect_right(self.cumulative_sizes, idx)
+        if dataset_idx == 0:
+            sample_idx = idx
+        else:
+            sample_idx = idx - self.cumulative_sizes[dataset_idx - 1]
+        # only modified line: call __getitem__ on the underlying dataset
+        return self.datasets[dataset_idx].__getitem__(sample_idx, **kwargs)
+
     @property
     def graph(self) -> td.graph.InMemoryGraph:
         return self.datasets[0].graph
