@@ -448,7 +448,7 @@ def extract_edge_features(
     LOG.info("Completed inference on %d batches", batch_idx)
     LOG.info("Concatenating predictions")
     edge_ids = torch.cat(edge_ids, dim=0)
-    edge_features = torch.cat(edge_features, dim=0)
+    edge_features = torch.cat(edge_features, dim=1).squeeze(0)
     LOG.info("Concatenated predictions - edges: %d", edge_ids.shape[0])
 
     edge_df = pl.DataFrame(
