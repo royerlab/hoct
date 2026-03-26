@@ -194,7 +194,6 @@ def fit_from_labels(
         optimizer.zero_grad()
         loss = criterion(head(X).squeeze(1), y)
         loss.backward()
-        print(X.shape, y.shape, y.mean())
         print("loss:", loss.item())
         return loss
 
