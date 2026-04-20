@@ -79,7 +79,7 @@ class ILPSolverConfig(BaseModel):
             division_weight=0.25,
             edge_bias=0.5,
             node_weight=-10.0,
-            timeout=600.0,
+            timeout=7200.0,  # 2 hours
             tracklet_solver=True,
         )
 
