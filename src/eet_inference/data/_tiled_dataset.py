@@ -37,13 +37,13 @@ class TiledRoiDataset(Dataset):
         max_t = time_pts.max()
 
         self._tiles: list[Tile] = [
-            Tile(slicing=t.slicing, slicing_wo_overlap=t.slicing_wo_overlap)
-            for t in apply_tiled(
+            tile
+            for tile in apply_tiled(
                 graph=self._graph,
                 tiling_scheme=tiling_scheme,
                 func=lambda x: x,
             )
-            if len(t.graph_filter.edge_ids()) > 0  # removing empty tiles
+            if tile.graph_filter.num_edges() > 0  # removing empty tiles
         ]
 
         if len(self._tiles) == 0:
