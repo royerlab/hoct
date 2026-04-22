@@ -17,6 +17,7 @@ from tqdm import tqdm
 
 from eet_inference._logging import LOG
 from eet_inference.data import DataKeys, FrameDataset, TiledRoiDataset
+from torch.utils.data import IterableDataset
 from eet_inference.tracking import ILPSolverConfig, solve_tracking
 
 
@@ -114,16 +115,19 @@ def _prefetch_iterator(
         The fetched item with tensor fields moved to ``device``.
     """
     is_loader = isinstance(ds, DataLoader)
+    is_iterable = isinstance(ds, IterableDataset)
     if prefetch is None:
-        prefetch = not is_loader
+        prefetch = not is_loader and not is_iterable
     LOG.info(f"Prefetching: {prefetch}")
+
+    needs_unsqueeze = not is_loader
 
     def _transfer(item: Any) -> Any:
         if item is None:
             return None
         return {
             k: (
-                (v if is_loader else v.unsqueeze(0)).to(device, non_blocking=True)
+                (v.unsqueeze(0) if needs_unsqueeze else v).to(device, non_blocking=True)
                 if isinstance(v, torch.Tensor)
                 else v
             )
@@ -131,10 +135,10 @@ def _prefetch_iterator(
         }
 
     stop = object()
+    total = len(ds) if hasattr(ds, "__len__") else None
 
-    if is_loader:
+    if is_loader or is_iterable:
         source = iter(ds)
-        total = len(ds) if hasattr(ds, "__len__") else None
 
         def _fetch() -> Any:
             try:
@@ -142,7 +146,6 @@ def _prefetch_iterator(
             except StopIteration:
                 return stop
     else:
-        total = len(ds)
         indices = iter(range(total))
 
         def _fetch() -> Any:
@@ -178,7 +181,7 @@ def _prefetch_iterator(
 @torch.inference_mode()
 def model_predict(
     model: EdgeModel,
-    ds: FrameDataset | TiledRoiDataset | DataLoader,
+    ds: FrameDataset | TiledRoiDataset | IterableDataset | DataLoader,
     solver_config: ILPSolverConfig | None = None,
     return_solution: bool = True,
     prefetch: bool | None = None,

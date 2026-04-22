@@ -4,7 +4,7 @@ from pathlib import Path
 
 import polars as pl
 import tracksdata as td
-from torch.utils.data import ConcatDataset, Dataset
+from torch.utils.data import ConcatDataset, Dataset, IterableDataset
 
 from eet_inference.data._batching import DataItem, DataKeys, item_from_filter
 
@@ -158,7 +158,43 @@ class FrameDataset(Dataset):
             return 1
 
 
+class _GraphChainDataset(IterableDataset):
+    """Chains iterable datasets (e.g. TiledRoiDataset), returned by GraphConcatDataset."""
+
+    def __init__(self, datasets: list[IterableDataset]) -> None:
+        super().__init__()
+        self.datasets = datasets
+
+    def __iter__(self):
+        for ds in self.datasets:
+            yield from ds
+
+    @property
+    def graph(self) -> td.graph.InMemoryGraph:
+        return self.datasets[0].graph
+
+    @property
+    def gt_graph(self) -> td.graph.InMemoryGraph | None:
+        return self.datasets[0].gt_graph  # type: ignore[attr-defined]
+
+    @property
+    def group(self) -> str:
+        return self.datasets[0].group  # type: ignore[attr-defined]
+
+
 class GraphConcatDataset(ConcatDataset):
+    """Concat dataset with graph metadata properties.
+
+    When all datasets are IterableDataset, GraphConcatDataset(datasets) returns
+    a _GraphChainDataset instead of a ConcatDataset to avoid materializing tiles.
+    """
+
+    def __new__(cls, datasets):
+        datasets = list(datasets)
+        if all(isinstance(d, IterableDataset) for d in datasets):
+            return _GraphChainDataset(datasets)
+        return super().__new__(cls)
+
     @property
     def graph(self) -> td.graph.InMemoryGraph:
         return self.datasets[0].graph
