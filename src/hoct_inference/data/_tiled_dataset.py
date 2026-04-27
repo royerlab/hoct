@@ -1,5 +1,5 @@
 from collections.abc import Callable, Generator, Sequence
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 import polars as pl
 import tracksdata as td
@@ -44,7 +44,8 @@ class TiledRoiDataset(IterableDataset):
     def graph(self) -> td.graph.InMemoryGraph:
         return self._graph
 
-    def _iter_tiles(self) -> Generator[DataItem, None, None]:
+    def iter_items(self, **kwargs: Any) -> Generator[DataItem, None, None]:
+        """Iterate over tiles, forwarding ``kwargs`` (e.g. ``extra_edge_attrs``) to ``item_from_filter``."""
         for tile in apply_tiled(
             graph=self._graph,
             tiling_scheme=self._tiling_scheme,
@@ -65,7 +66,8 @@ class TiledRoiDataset(IterableDataset):
                 self._properties,
                 df_transforms,
                 self._dict_transforms,
+                **kwargs,
             )
 
     def __iter__(self) -> Generator[DataItem, None, None]:
-        yield from self._iter_tiles()
+        yield from self.iter_items()

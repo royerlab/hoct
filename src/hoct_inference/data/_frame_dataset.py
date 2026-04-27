@@ -1,3 +1,4 @@
+import bisect
 import itertools
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -95,6 +96,11 @@ class FrameDataset(Dataset):
 
         return data
 
+    def iter_items(self, **kwargs: Any):
+        """Iterate over the dataset, forwarding ``kwargs`` to ``__getitem__``."""
+        for i in range(len(self)):
+            yield self.__getitem__(i, **kwargs)
+
     @property
     def graph(self) -> td.graph.InMemoryGraph:
         return self._graph
@@ -168,9 +174,20 @@ class _GraphChainDataset(IterableDataset):
         super().__init__()
         self.datasets = datasets
 
-    def __iter__(self):
+    def iter_items(self, **kwargs: Any):
+        """Chain ``iter_items(**kwargs)`` of every wrapped dataset."""
         for ds in self.datasets:
-            yield from ds
+            if hasattr(ds, "iter_items"):
+                yield from ds.iter_items(**kwargs)
+            elif kwargs:
+                raise TypeError(
+                    f"{type(ds).__name__} does not support iter_items kwargs: {list(kwargs)}"
+                )
+            else:
+                yield from ds
+
+    def __iter__(self):
+        yield from self.iter_items()
 
     @property
     def graph(self) -> td.graph.InMemoryGraph:
@@ -192,19 +209,20 @@ class GraphConcatDataset(ConcatDataset):
     a _GraphChainDataset instead of a ConcatDataset to avoid materializing tiles.
     """
 
-    # def __getitem__(self, idx: int, **kwargs: Any) -> DataItem:
-    #     # copied from ConcatDataset.__getitem__
-    #     if idx < 0:
-    #         if -idx > len(self):
-    #             raise ValueError("absolute value of index should not exceed dataset length")
-    #         idx = len(self) + idx
-    #     dataset_idx = bisect.bisect_right(self.cumulative_sizes, idx)
-    #     if dataset_idx == 0:
-    #         sample_idx = idx
-    #     else:
-    #         sample_idx = idx - self.cumulative_sizes[dataset_idx - 1]
-    #     # only modified line: call __getitem__ on the underlying dataset
-    #     return self.datasets[dataset_idx].__getitem__(sample_idx, **kwargs)
+    def __getitem__(self, idx: int, **kwargs: Any) -> DataItem:
+        # Copied from ConcatDataset.__getitem__; only difference is forwarding **kwargs
+        # to the underlying dataset's __getitem__.
+        if idx < 0:
+            if -idx > len(self):
+                raise ValueError("absolute value of index should not exceed dataset length")
+            idx = len(self) + idx
+        dataset_idx = bisect.bisect_right(self.cumulative_sizes, idx)
+        if dataset_idx == 0:
+            sample_idx = idx
+        else:
+            sample_idx = idx - self.cumulative_sizes[dataset_idx - 1]
+        return self.datasets[dataset_idx].__getitem__(sample_idx, **kwargs)
+
     def __new__(cls, datasets):
         datasets = list(datasets)
         if all(isinstance(d, IterableDataset) for d in datasets):
