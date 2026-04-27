@@ -173,14 +173,14 @@ def fit_from_labels(
     # No dedup: same edge in multiple windows → multiple feature rows (windowing augmentation).
     all_features_df = extract_edge_features(backbone, labeled_dataset, edge_filter_key=None)
 
-    all_edge_attrs = graph.edge_attrs(
-        attr_keys=[
-            td.DEFAULT_ATTR_KEYS.EDGE_ID,
-            label_mask_key,
-            label_key,
-            td.DEFAULT_ATTR_KEYS.SOLUTION,
-        ]
-    )
+    # Only include the ILP solution column when it exists on the graph; otherwise the
+    # consistency loss is skipped (e.g. before any ILP solve has populated it).
+    has_solution = td.DEFAULT_ATTR_KEYS.SOLUTION in graph.edge_attr_keys()
+    attr_keys = [td.DEFAULT_ATTR_KEYS.EDGE_ID, label_mask_key, label_key]
+    if has_solution:
+        attr_keys.append(td.DEFAULT_ATTR_KEYS.SOLUTION)
+
+    all_edge_attrs = graph.edge_attrs(attr_keys=attr_keys)
     labeled_attrs = all_edge_attrs.filter(pl.col(label_mask_key)).join(
         all_features_df, on=td.DEFAULT_ATTR_KEYS.EDGE_ID, how="inner"
     )
@@ -194,9 +194,14 @@ def fit_from_labels(
     # Consistency target: ILP solution (0/1) on unlabeled edges.
     X_unlab: torch.Tensor | None = None
     y_unlab: torch.Tensor | None = None
-    if consistency_weight > 0 and len(unlabeled_attrs) > 0:
+    if consistency_weight > 0 and has_solution and len(unlabeled_attrs) > 0:
         X_unlab = unlabeled_attrs["edge_features"].to_torch().float().to(device)
         y_unlab = unlabeled_attrs[td.DEFAULT_ATTR_KEYS.SOLUTION].to_torch().float().to(device)
+    elif consistency_weight > 0 and not has_solution:
+        LOG.warning(
+            "Consistency loss requested but graph has no '%s' attribute; skipping it.",
+            td.DEFAULT_ATTR_KEYS.SOLUTION,
+        )
 
     n_features = X.shape[1]
     head = nn.Linear(n_features, 1)
