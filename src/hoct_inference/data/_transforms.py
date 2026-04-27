@@ -9,7 +9,7 @@ import numpy as np
 import polars as pl
 import torch
 
-from eet_inference.data._batching import DataKeys
+from hoct_inference.data._batching import DataKeys
 
 
 def _uniform(size: int, support: tuple[float, float]) -> torch.Tensor:

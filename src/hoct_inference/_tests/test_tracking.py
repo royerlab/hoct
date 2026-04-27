@@ -1,11 +1,11 @@
-"""Tests for eet_inference.tracking module."""
+"""Tests for hoct_inference.tracking module."""
 
 import polars as pl
 import pytest
 import tracksdata as td
 
-from eet_inference._tests.conftest import GEFF_2D, GEFF_3D
-from eet_inference.tracking import ILPSolverConfig, TrackletSolver, solve_tracking
+from hoct_inference._tests.conftest import GEFF_2D, GEFF_3D
+from hoct_inference.tracking import ILPSolverConfig, TrackletSolver, solve_tracking
 
 
 def prepare_graph_for_tracking(graph: td.graph.BaseGraph) -> td.graph.BaseGraph:

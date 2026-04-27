@@ -1,14 +1,14 @@
-"""Tests for eet_inference._api module.
+"""Tests for hoct_inference._api module.
 
 Tests focus on important behavioral aspects of graph creation API.
 """
 
 import numpy as np
 import pytest
-from eet_features.constants import REGIONPROPS
-from eet_features.graph import create_graph
+from hoct_features.constants import REGIONPROPS
+from hoct_features.graph import create_graph
 
-from eet_inference.tracking import ILPSolverConfig
+from hoct_inference.tracking import ILPSolverConfig
 
 
 @pytest.fixture

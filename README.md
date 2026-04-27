@@ -1,6 +1,6 @@
-# EET Inference
+# HOCT Inference
 
-Inference API and CLI for the Edge Embedding Tracking (EET) model with JIT-compiled models.
+Inference API and CLI for the Higher-Order Cell Tracking Transformer (HOCT) model with JIT-compiled models.
 
 ## Installation
 
@@ -9,7 +9,7 @@ Inference API and CLI for the Edge Embedding Tracking (EET) model with JIT-compi
 uv sync
 
 # Or install directly
-pip install -e eet_inference
+pip install -e hoct_inference
 ```
 
 ## Usage
@@ -17,13 +17,13 @@ pip install -e eet_inference
 ### Command Line
 
 ```bash
-eet-inference --help
+hoct-inference --help
 ```
 
 ### Python API
 
 ```python
-import eet_inference
+import hoct_inference
 
 # TODO: Add API usage examples
 ```
@@ -32,7 +32,7 @@ import eet_inference
 
 ```bash
 # Install development dependencies
-cd eet_inference
+cd hoct_inference
 uv sync --extra dev
 
 # Run tests

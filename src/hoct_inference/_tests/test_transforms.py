@@ -3,13 +3,11 @@ import polars as pl
 import pytest
 import torch
 
-from eet_inference.data._transforms import (
+from hoct_inference.data._transforms import (
     Affine,
     Flip,
-    Standardize,
     Power,
 )
-
 
 
 class TestFlip:

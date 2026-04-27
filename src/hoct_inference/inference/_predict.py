@@ -1,4 +1,4 @@
-"""Model prediction and inference utilities for EET."""
+"""Model prediction and inference utilities for HOCT."""
 
 import os
 from collections.abc import Callable, Generator, Iterator
@@ -15,9 +15,9 @@ import tracksdata as td
 from torch.utils.data import DataLoader, Dataset, IterableDataset
 from tqdm import tqdm
 
-from eet_inference._logging import LOG
-from eet_inference.data import DataKeys, FrameDataset, TiledRoiDataset
-from eet_inference.tracking import ILPSolverConfig, solve_tracking
+from hoct_inference._logging import LOG
+from hoct_inference.data import DataKeys, FrameDataset, TiledRoiDataset
+from hoct_inference.tracking import ILPSolverConfig, solve_tracking
 
 
 class ModelPrediction(NamedTuple):
@@ -255,9 +255,9 @@ def model_predict(
 
     Examples
     --------
-    >>> from eet_inference.data import FrameDataset
-    >>> from eet_inference.inference import model_predict, EdgeModel
-    >>> from eet_inference.tracking import ILPSolverConfig
+    >>> from hoct_inference.data import FrameDataset
+    >>> from hoct_inference.inference import model_predict, EdgeModel
+    >>> from hoct_inference.tracking import ILPSolverConfig
     >>>
     >>> # Load dataset and model
     >>> graph, _ = td.graph.InMemoryGraph.from_geff("data.geff")

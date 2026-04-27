@@ -3,8 +3,8 @@ import math
 import tracksdata as td
 from pydantic import BaseModel, Field
 
-from eet_inference._logging import LOG
-from eet_inference.tracking._tracklet_solver import TrackletSolver
+from hoct_inference._logging import LOG
+from hoct_inference.tracking._tracklet_solver import TrackletSolver
 
 
 class ILPSolverConfig(BaseModel):
@@ -145,9 +145,13 @@ def solve_tracking(
         "node_weight": config.node_weight,
         "timeout": config.timeout,
     }
-    LOG.debug("Solver weights configured: appearance=%.2f, disappearance=%.2f, division=%.2f, node=%.2f",
-              kwargs["appearance_weight"], kwargs["disappearance_weight"],
-              kwargs["division_weight"], kwargs["node_weight"])
+    LOG.debug(
+        "Solver weights configured: appearance=%.2f, disappearance=%.2f, division=%.2f, node=%.2f",
+        kwargs["appearance_weight"],
+        kwargs["disappearance_weight"],
+        kwargs["division_weight"],
+        kwargs["node_weight"],
+    )
 
     # Two-pass solving: first tracklets, then linkage
     if config.tracklet_solver:

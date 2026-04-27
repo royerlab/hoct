@@ -1,17 +1,17 @@
-"""High-level prediction API for EET inference from raw images and labels."""
+"""High-level prediction API for HOCT inference from raw images and labels."""
 
 import polars as pl
 import tracksdata as td
-from eet_features.constants import REGIONPROPS
-from eet_features.graph import create_graph
+from hoct_features.constants import REGIONPROPS
+from hoct_features.graph import create_graph
 from numpy.typing import ArrayLike
 from tracksdata.functional import TilingScheme
 
-from eet_inference._logging import LOG
-from eet_inference.data import FrameDataset, GraphConcatDataset, TiledRoiDataset
-from eet_inference.data._transforms import Affine, Flip, Standardize
-from eet_inference.inference import EdgeModel, model_predict
-from eet_inference.tracking import ILPSolverConfig
+from hoct_inference._logging import LOG
+from hoct_inference.data import FrameDataset, GraphConcatDataset, TiledRoiDataset
+from hoct_inference.data._transforms import Affine, Flip, Standardize
+from hoct_inference.inference import EdgeModel, model_predict
+from hoct_inference.tracking import ILPSolverConfig
 
 __all__ = ["create_graph_from_points", "predict"]
 
@@ -101,7 +101,7 @@ def create_graph_from_points(
     Examples
     --------
     >>> import polars as pl
-    >>> from eet_inference import create_graph_from_points
+    >>> from hoct_inference import create_graph_from_points
     >>>
     >>> # Create 2D points
     >>> points = pl.DataFrame(
@@ -216,7 +216,7 @@ def predict(
     """
     Run end-to-end cell tracking prediction from raw data.
 
-    This is the main high-level API for EET inference. It takes raw segmentation
+    This is the main high-level API for HOCT inference. It takes raw segmentation
     labels (and optionally intensity images), creates a candidate tracking graph,
     runs the neural network to predict edge probabilities and orphan probabilities,
     and solves the tracking problem using ILP optimization.
@@ -224,7 +224,7 @@ def predict(
     Parameters
     ----------
     model : EdgeModel
-        Trained EET edge prediction model (PyTorch JIT or regular model).
+        Trained HOCT edge prediction model (PyTorch JIT or regular model).
     graph : td.graph.BaseGraph | None
         Graph with features ready for prediction.
     labels : ArrayLike | None
@@ -262,11 +262,11 @@ def predict(
     --------
     >>> import torch
     >>> import numpy as np
-    >>> from eet_inference import predict
-    >>> from eet_inference.tracking import ILPSolverConfig
+    >>> from hoct_inference import predict
+    >>> from hoct_inference.tracking import ILPSolverConfig
     >>>
     >>> # Load model
-    >>> model = torch.jit.load("eet_model.pt")
+    >>> model = torch.jit.load("hoct_model.pt")
     >>>
     >>> # Create synthetic labels
     >>> labels = np.random.randint(0, 20, size=(10, 256, 256))
@@ -289,7 +289,7 @@ def predict(
     Notes
     -----
     This function performs the following steps:
-    1. Creates candidate tracking graph from labels using eet_features.graph.create_graph
+    1. Creates candidate tracking graph from labels using hoct_features.graph.create_graph
     2. Creates dataset (FrameDataset or TiledRoiDataset depending on tiling_scheme)
     3. Runs model inference to predict edge similarities and orphan probabilities
     4. Solves tracking using ILP optimization
@@ -301,7 +301,7 @@ def predict(
     if solver_config is None:
         solver_config = ILPSolverConfig.default()
 
-    LOG.info("Starting EET prediction pipeline")
+    LOG.info("Starting HOCT prediction pipeline")
 
     if graph is None:
         LOG.info("Creating candidate tracking graph")

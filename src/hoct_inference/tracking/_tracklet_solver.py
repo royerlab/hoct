@@ -5,7 +5,7 @@ import rustworkx as rx
 import tracksdata as td
 from tracksdata.solvers import ILPSolver
 
-from eet_inference._logging import LOG
+from hoct_inference._logging import LOG
 
 
 class TrackletSolver(ILPSolver):

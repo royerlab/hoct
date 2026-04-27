@@ -2,10 +2,10 @@ from typing import TYPE_CHECKING
 
 from torch.utils.data import Dataset
 
-from eet_inference._logging import LOG
+from hoct_inference._logging import LOG
 
 if TYPE_CHECKING:
-    from eet_inference.data import DataItem, FrameDataset, GraphConcatDataset, TiledRoiDataset
+    from hoct_inference.data import DataItem, FrameDataset, GraphConcatDataset, TiledRoiDataset
 
 
 class LabeledDataset(Dataset):
