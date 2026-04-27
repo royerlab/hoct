@@ -10,7 +10,7 @@ import tracksdata as td
 from tracksdata.graph._rustworkx_graph import RXFilter
 from tracksdata.utils._dataframe import unpack_array_attrs
 
-from eet_inference._logging import LOG
+from hoct_inference._logging import LOG
 
 
 @dataclass(frozen=True)

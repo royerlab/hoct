@@ -1,18 +1,16 @@
-"""Tests for eet_inference.data._batching module."""
+"""Tests for hoct_inference.data._batching module."""
 
-import numpy as np
 import pytest
 import torch
 import tracksdata as td
 
-from eet_inference.data._batching import (
-    DataItem,
+from hoct_inference._tests.conftest import GEFF_2D, GEFF_3D
+from hoct_inference.data._batching import (
     DataKeys,
     _pad_tensor,
     collate_varying_length,
     item_from_filter,
 )
-from eet_inference._tests.conftest import GEFF_2D, GEFF_3D
 
 
 class TestPadTensor:
@@ -62,10 +60,13 @@ class TestPadTensor:
 class TestItemFromFilter:
     """Tests for item_from_filter function with real GEFF data."""
 
-    @pytest.mark.parametrize("geff_path,expected_dims", [
-        (GEFF_2D, 2),  # DIC-C2DH-HeLa is 2D
-        (GEFF_3D, 3),  # Fluo-C3DL-MDA231 is 3D
-    ])
+    @pytest.mark.parametrize(
+        "geff_path,expected_dims",
+        [
+            (GEFF_2D, 2),  # DIC-C2DH-HeLa is 2D
+            (GEFF_3D, 3),  # Fluo-C3DL-MDA231 is 3D
+        ],
+    )
     def test_item_from_filter_structure(self, geff_path, expected_dims):
         """Test that item_from_filter returns properly structured DataItem."""
         # Load graph

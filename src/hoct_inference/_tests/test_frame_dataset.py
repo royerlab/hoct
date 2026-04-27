@@ -1,11 +1,11 @@
-"""Tests for eet_inference.data.frame_dataset module."""
+"""Tests for hoct_inference.data.frame_dataset module."""
 
 import pytest
 import tracksdata as td
 
-from eet_inference.data._batching import DataKeys
-from eet_inference.data._frame_dataset import FrameDataset
-from eet_inference._tests.conftest import GEFF_2D, GEFF_3D
+from hoct_inference._tests.conftest import GEFF_2D, GEFF_3D
+from hoct_inference.data._batching import DataKeys
+from hoct_inference.data._frame_dataset import FrameDataset
 
 
 class TestFrameDataset:

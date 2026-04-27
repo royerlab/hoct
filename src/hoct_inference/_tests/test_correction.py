@@ -1,18 +1,18 @@
-"""Tests for eet_inference.correction module."""
+"""Tests for hoct_inference.correction module."""
 
 import numpy as np
 import polars as pl
 import pytest
 import torch
 import tracksdata as td
-from eet_features.constants import REGIONPROPS
-from eet_features.graph import create_graph
+from hoct_features.constants import REGIONPROPS
+from hoct_features.graph import create_graph
 from torch import nn
 
-from eet_inference.correction import ProbedModel, fit_from_labels, label_edge
-from eet_inference.data import FrameDataset, LabeledDataset
-from eet_inference.inference import EdgeModel, ModelPrediction, model_predict
-from eet_inference.tracking import ILPSolverConfig
+from hoct_inference.correction import ProbedModel, fit_from_labels, label_edge
+from hoct_inference.data import FrameDataset, LabeledDataset
+from hoct_inference.inference import EdgeModel, ModelPrediction, model_predict
+from hoct_inference.tracking import ILPSolverConfig
 
 _HIDDEN_SIZE = 4
 

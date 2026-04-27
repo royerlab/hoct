@@ -3,9 +3,9 @@ requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
 [project]
-name = "eet-inference"
+name = "hoct-inference"
 version = "0.1.0"
-description = "Inference API and CLI for Edge Embedding Tracking (EET) model with JIT-compiled models"
+description = "Inference API and CLI for Higher-Order Cell Tracking Transformer (HOCT) model with JIT-compiled models"
 readme = "README.md"
 authors = [
     { name = "Jordao Bragantini", email = "jordao.bragantini@czbiohub.org" }
@@ -29,7 +29,7 @@ dependencies = [
     "polars>=1.0.0",
     "spatial-graph>=0.0.5",
     "tracksdata",
-    "eet-features>=0.1.0",
+    "hoct-features>=0.1.0",
     "pydantic>=2.12.5",
     "pyyaml>=6.0.3",
     "typer>=0.21.1",
@@ -51,7 +51,7 @@ dev = [
 ]
 
 [project.scripts]
-eet-inference = "eet_inference.cli:main"
+hoct-inference = "hoct_inference.cli:main"
 
 [tool.hatch.metadata]
 allow-direct-references = true
@@ -60,7 +60,7 @@ allow-direct-references = true
 source = "vcs"
 
 [tool.hatch.build.hooks.vcs]
-version-file = "src/eet_inference/__about__.py"
+version-file = "src/hoct_inference/__about__.py"
 
 # https://docs.astral.sh/ruff
 [tool.ruff]
@@ -88,7 +88,7 @@ select = [
 
 [tool.ruff.lint.per-file-ignores]
 "_tests/*.py" = ["D", "S"]
-"src/eet_inference/cli.py" = ["B008"]
+"src/hoct_inference/cli.py" = ["B008"]
 
 # https://docs.astral.sh/ruff/formatter/
 [tool.ruff.format]
@@ -97,4 +97,4 @@ skip-magic-trailing-comma = false
 
 [tool.pytest.ini_options]
 minversion = "7.0"
-testpaths = ["src/eet_inference/_tests"]
+testpaths = ["src/hoct_inference/_tests"]

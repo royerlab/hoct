@@ -6,8 +6,8 @@ import tracksdata as td
 from torch.utils.data import IterableDataset
 from tracksdata.functional import TilingScheme, apply_tiled
 
-from eet_inference.data._batching import DataItem, item_from_filter
-from eet_inference.data._transforms import Translate
+from hoct_inference.data._batching import DataItem, item_from_filter
+from hoct_inference.data._transforms import Translate
 
 
 class Tile(NamedTuple):

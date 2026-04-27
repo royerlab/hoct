@@ -7,7 +7,7 @@ import polars as pl
 import tracksdata as td
 from torch.utils.data import ConcatDataset, Dataset, IterableDataset
 
-from eet_inference.data._batching import DataItem, DataKeys, item_from_filter
+from hoct_inference.data._batching import DataItem, DataKeys, item_from_filter
 
 
 class FrameDataset(Dataset):

@@ -54,4 +54,4 @@ Thumbs.db
 *.jit
 
 # package version
-src/eet_inference/__about__.py
+src/hoct_inference/__about__.py

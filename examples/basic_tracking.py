@@ -1,4 +1,4 @@
-"""Basic example of cell tracking with EET."""
+"""Basic example of cell tracking with HOCT."""
 
 from pathlib import Path
 
@@ -6,10 +6,10 @@ import napari
 import torch
 import tracksdata as td
 from dask.array.image import imread
-from eet_features.features import normalize_image
+from hoct_features.features import normalize_image
 
-from eet_inference import predict
-from eet_inference.tracking import ILPSolverConfig
+from hoct_inference import predict
+from hoct_inference.tracking import ILPSolverConfig
 
 
 def main():

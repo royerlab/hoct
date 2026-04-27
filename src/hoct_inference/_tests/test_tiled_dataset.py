@@ -1,4 +1,4 @@
-"""Tests for eet_inference.data._tiled_dataset module."""
+"""Tests for hoct_inference.data._tiled_dataset module."""
 
 import itertools
 
@@ -7,9 +7,9 @@ import tracksdata as td
 from torch.utils.data import IterableDataset
 from tracksdata.functional import TilingScheme
 
-from eet_inference._tests.conftest import GEFF_2D, GEFF_3D
-from eet_inference.data._batching import DataKeys
-from eet_inference.data._tiled_dataset import Tile, TiledRoiDataset
+from hoct_inference._tests.conftest import GEFF_2D, GEFF_3D
+from hoct_inference.data._batching import DataKeys
+from hoct_inference.data._tiled_dataset import Tile, TiledRoiDataset
 
 
 class TestTile:

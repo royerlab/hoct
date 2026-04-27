@@ -1,4 +1,4 @@
-"""Command-line interface for eet-inference."""
+"""Command-line interface for hoct-inference."""
 
 import shutil
 from pathlib import Path
@@ -12,10 +12,10 @@ import yaml
 from rich.console import Console
 from rich.panel import Panel
 
-from eet_inference import __version__
-from eet_inference.data import FrameDataset
-from eet_inference.inference import model_predict
-from eet_inference.tracking import ILPSolverConfig
+from hoct_inference import __version__
+from hoct_inference.data import FrameDataset
+from hoct_inference.inference import model_predict
+from hoct_inference.tracking import ILPSolverConfig
 
 
 def _fix_inertia_tensor(graph: td.graph.BaseGraph) -> None:
@@ -28,8 +28,8 @@ def _fix_inertia_tensor(graph: td.graph.BaseGraph) -> None:
 
 
 app = typer.Typer(
-    name="eet-inference",
-    help="Inference CLI for Edge Embedding Tracking (EET) model",
+    name="hoct-inference",
+    help="Inference CLI for Higher-Order Cell Tracking Transformer (HOCT) model",
     add_completion=False,
     pretty_exceptions_enable=False,
 )
@@ -39,7 +39,7 @@ console = Console()
 def version_callback(value: bool):
     """Print version and exit."""
     if value:
-        console.print(f"eet-inference version: {__version__}")
+        console.print(f"hoct-inference version: {__version__}")
         raise typer.Exit()
 
 
@@ -68,9 +68,9 @@ def predict(
     4. Saves the result with solution attributes
 
     Example:
-        eet-inference predict data.geff model.pt --config solver_config.yaml
+        hoct-inference predict data.geff model.pt --config solver_config.yaml
     """
-    console.print(Panel.fit("EET Inference - Model Prediction", style="bold blue"))
+    console.print(Panel.fit("HOCT Inference - Model Prediction", style="bold blue"))
 
     if output.exists() and not overwrite:
         console.print(f"[red]Output directory {output} already exists. Use --overwrite to overwrite.[/red]")
@@ -156,7 +156,7 @@ def init_config(
     Generate a template ILP solver configuration YAML file.
 
     Example:
-        eet-inference init-config --output my_config.yaml
+        hoct-inference init-config --output my_config.yaml
     """
     console.print(Panel.fit("Generating ILP Solver Config Template", style="bold blue"))
 
@@ -178,7 +178,7 @@ def main(
         None, "--version", "-v", callback=version_callback, is_eager=True, help="Show version and exit"
     ),
 ):
-    """EET Inference - Command-line interface for Edge Embedding Tracking model inference."""
+    """HOCT Inference - Command-line interface for Higher-Order Cell Tracking Transformer model inference."""
     pass
 
 
