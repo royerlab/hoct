@@ -1,4 +1,3 @@
-import bisect
 import itertools
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -6,7 +5,7 @@ from typing import Any
 
 import polars as pl
 import tracksdata as td
-from torch.utils.data import ConcatDataset, Dataset
+from torch.utils.data import ConcatDataset, Dataset, IterableDataset
 
 from eet_inference.data._batching import DataItem, DataKeys, item_from_filter
 
@@ -162,20 +161,55 @@ class FrameDataset(Dataset):
             return 1
 
 
+class _GraphChainDataset(IterableDataset):
+    """Chains iterable datasets (e.g. TiledRoiDataset), returned by GraphConcatDataset."""
+
+    def __init__(self, datasets: list[IterableDataset]) -> None:
+        super().__init__()
+        self.datasets = datasets
+
+    def __iter__(self):
+        for ds in self.datasets:
+            yield from ds
+
+    @property
+    def graph(self) -> td.graph.InMemoryGraph:
+        return self.datasets[0].graph
+
+    @property
+    def gt_graph(self) -> td.graph.InMemoryGraph | None:
+        return self.datasets[0].gt_graph  # type: ignore[attr-defined]
+
+    @property
+    def group(self) -> str:
+        return self.datasets[0].group  # type: ignore[attr-defined]
+
+
 class GraphConcatDataset(ConcatDataset):
-    def __getitem__(self, idx: int, **kwargs: Any) -> DataItem:
-        # copied from ConcatDataset.__getitem__
-        if idx < 0:
-            if -idx > len(self):
-                raise ValueError("absolute value of index should not exceed dataset length")
-            idx = len(self) + idx
-        dataset_idx = bisect.bisect_right(self.cumulative_sizes, idx)
-        if dataset_idx == 0:
-            sample_idx = idx
-        else:
-            sample_idx = idx - self.cumulative_sizes[dataset_idx - 1]
-        # only modified line: call __getitem__ on the underlying dataset
-        return self.datasets[dataset_idx].__getitem__(sample_idx, **kwargs)
+    """Concat dataset with graph metadata properties.
+
+    When all datasets are IterableDataset, GraphConcatDataset(datasets) returns
+    a _GraphChainDataset instead of a ConcatDataset to avoid materializing tiles.
+    """
+
+    # def __getitem__(self, idx: int, **kwargs: Any) -> DataItem:
+    #     # copied from ConcatDataset.__getitem__
+    #     if idx < 0:
+    #         if -idx > len(self):
+    #             raise ValueError("absolute value of index should not exceed dataset length")
+    #         idx = len(self) + idx
+    #     dataset_idx = bisect.bisect_right(self.cumulative_sizes, idx)
+    #     if dataset_idx == 0:
+    #         sample_idx = idx
+    #     else:
+    #         sample_idx = idx - self.cumulative_sizes[dataset_idx - 1]
+    #     # only modified line: call __getitem__ on the underlying dataset
+    #     return self.datasets[dataset_idx].__getitem__(sample_idx, **kwargs)
+    def __new__(cls, datasets):
+        datasets = list(datasets)
+        if all(isinstance(d, IterableDataset) for d in datasets):
+            return _GraphChainDataset(datasets)
+        return super().__new__(cls)
 
     @property
     def graph(self) -> td.graph.InMemoryGraph:

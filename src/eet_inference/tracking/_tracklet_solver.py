@@ -159,9 +159,19 @@ class TrackletSolver(ILPSolver):
 
         tracklet_graph.summary(attrs_stats=True)
 
+        tracklet_invalid_edges = tracklet_graph.edge_attrs().filter(pl.col("delta_t") <= 0)
+        if len(tracklet_invalid_edges) > 0:
+            raise ValueError(
+                f"Found {len(tracklet_invalid_edges)} edges with delta_t <= 0 in "
+                f"the tracklet graph.\n{tracklet_invalid_edges}"
+            )
+
         if LOG.isEnabledFor(logging.INFO):
             summary = tracklet_graph.summary(attrs_stats=True, print_summary=False)
             LOG.info(summary)
+
+        # must reset the tracklet ids
+        graph.update_node_attrs(attrs={tracklet_id_key: -1})
 
         return tracklet_graph
 

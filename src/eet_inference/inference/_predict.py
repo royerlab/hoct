@@ -1,9 +1,10 @@
 """Model prediction and inference utilities for EET."""
 
 import os
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator, Iterator
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import AbstractContextManager, nullcontext
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 # this is to avoid OOM errors when using large tiling schemes
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"  # type: ignore
@@ -11,7 +12,7 @@ os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"  # type: igno
 import polars as pl
 import torch
 import tracksdata as td
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset, IterableDataset
 from tqdm import tqdm
 
 from eet_inference._logging import LOG
@@ -116,12 +117,109 @@ def _autocast_ctx(device: torch.device) -> AbstractContextManager:
     return nullcontext()
 
 
+def _prefetch_iterator(
+    ds: Dataset | DataLoader,
+    device: torch.device,
+    prefetch: bool | None = None,
+) -> Generator[Any, None, None]:
+    """Iterate over dataset / dataloader items with optional prefetch + H2D transfer.
+
+    When ``prefetch=True`` a background thread fetches the next item and moves
+    its tensors to ``device`` while the caller processes the current item,
+    hiding both I/O and the H2D copy behind compute. For map-style ``Dataset``
+    inputs a leading batch dim is added via ``unsqueeze(0)`` before transfer;
+    ``DataLoader`` batches are assumed to already be batched.
+
+    Non-tensor fields pass through unchanged. ``None`` items are yielded as-is
+    so the caller can decide how to handle empty batches.
+
+    Parameters
+    ----------
+    ds : Dataset | DataLoader
+        Map-style dataset (supports ``len(ds)`` and ``ds[i]``) or a DataLoader.
+    device : torch.device
+        Target device for the H2D transfer.
+    prefetch : bool | None, default=None
+        Whether to fetch + transfer the next item in a background thread. When
+        ``None``, defaults to ``True`` for map-style ``Dataset`` inputs and
+        ``False`` for ``DataLoader`` (which has its own worker-based prefetching).
+
+    Yields
+    ------
+    Any
+        The fetched item with tensor fields moved to ``device``.
+    """
+    is_loader = isinstance(ds, DataLoader)
+    is_iterable = isinstance(ds, IterableDataset)
+    if prefetch is None:
+        prefetch = not is_loader and not is_iterable
+    LOG.info(f"Prefetching: {prefetch}")
+
+    needs_unsqueeze = not is_loader
+
+    def _transfer(item: Any) -> Any:
+        if item is None:
+            return None
+        return {
+            k: (
+                (v.unsqueeze(0) if needs_unsqueeze else v).to(device, non_blocking=True)
+                if isinstance(v, torch.Tensor)
+                else v
+            )
+            for k, v in item.items()
+        }
+
+    stop = object()
+    total = len(ds) if hasattr(ds, "__len__") else None
+
+    if is_loader or is_iterable:
+        source = iter(ds)
+
+        def _fetch() -> Any:
+            try:
+                return _transfer(next(source))
+            except StopIteration:
+                return stop
+    else:
+        indices = iter(range(total))
+
+        def _fetch() -> Any:
+            try:
+                i = next(indices)
+            except StopIteration:
+                return stop
+            return _transfer(ds[i])
+
+    pbar = tqdm(total=total, desc="Model inference")
+    try:
+        if not prefetch:
+            while True:
+                item = _fetch()
+                if item is stop:
+                    return
+                pbar.update()
+                yield item
+
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(_fetch)
+            while True:
+                item = future.result()
+                if item is stop:
+                    return
+                future = pool.submit(_fetch)
+                pbar.update()
+                yield item
+    finally:
+        pbar.close()
+
+
 @torch.inference_mode()
 def model_predict(
     model: EdgeModel,
-    ds: FrameDataset | TiledRoiDataset | DataLoader,
+    ds: FrameDataset | TiledRoiDataset | IterableDataset | DataLoader,
     solver_config: ILPSolverConfig | None = None,
     return_solution: bool = True,
+    prefetch: bool | None = None,
 ) -> td.graph.InMemoryGraph | None:
     """
     Run model prediction on a dataset and solve tracking.
@@ -141,8 +239,13 @@ def model_predict(
     solver_config : ILPSolverConfig | None, default=None
         Configuration for the ILP tracking solver. If None, uses default configuration.
         See ILPSolverConfig for available parameters (weights, timeout, etc.).
-    return_solution : bool
-        Whether to return the solution graph or not.
+    return_solution : bool, default=True
+        Whether to return the solved tracking graph.
+    prefetch : bool | None, default=None
+        Whether to fetch the next item and move its tensors to the model's device
+        in a background thread while the model processes the current one. When
+        ``None``, defaults to ``True`` for map-style ``Dataset`` inputs and
+        ``False`` for ``DataLoader`` (which already prefetches via its own workers).
 
     Notes
     -----
@@ -188,7 +291,6 @@ def model_predict(
     orphan_exp = []
     node_ids = []
 
-    _ds_iterator, _expand_dims = _make_iterator(ds, device)
     # disabling recompilation
     torch._C._jit_set_bailout_depth(0)
     # torch.jit.set_fusion_strategy([])  # this doesn't work
@@ -197,21 +299,21 @@ def model_predict(
     # Run model inference
     with _autocast_ctx(device):
         batch_idx = 0
-        for batch in _ds_iterator():
+        for batch in _prefetch_iterator(ds, device, prefetch=prefetch):
             LOG.debug("Processing batch %d", batch_idx)
             if batch is None:
                 LOG.debug("Batch %d is None, skipping", batch_idx)
                 continue
 
-            input_batch = _expand_dims(batch[DataKeys.NODE_FEATS])
-            edges = _expand_dims(batch[DataKeys.EDGE_BATCH_ID])
-            node_mask = _expand_dims(batch.get(DataKeys.NODE_MASK, None))
-            edge_mask = _expand_dims(batch.get(DataKeys.EDGE_MASK, None))
-            e_id = _expand_dims(batch[DataKeys.EDGE_ID])
-            n_id = _expand_dims(batch[DataKeys.NODE_ID])
-            d_t = _expand_dims(batch[DataKeys.DELTA_T])
-            node_pos = _expand_dims(batch[DataKeys.NODE_POS])
-            edge_pos = _expand_dims(batch[DataKeys.EDGE_POS])
+            input_batch = batch[DataKeys.NODE_FEATS]
+            edges = batch[DataKeys.EDGE_BATCH_ID]
+            node_mask = batch.get(DataKeys.NODE_MASK)
+            edge_mask = batch.get(DataKeys.EDGE_MASK)
+            e_id = batch[DataKeys.EDGE_ID]
+            n_id = batch[DataKeys.NODE_ID]
+            d_t = batch[DataKeys.DELTA_T]
+            node_pos = batch[DataKeys.NODE_POS]
+            edge_pos = batch[DataKeys.EDGE_POS]
 
             # e_id.shape[1] is the number of edges in the batch
             if e_id.shape[1] <= 1 or (edge_mask is not None and edge_mask.sum() == 0):

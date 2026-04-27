@@ -53,5 +53,5 @@ Thumbs.db
 *.onnx
 *.jit
 
-# versioning
+# package version
 src/eet_inference/__about__.py
