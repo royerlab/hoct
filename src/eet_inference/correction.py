@@ -110,17 +110,27 @@ def fit_from_labels(
     label_key: str,
     tiling_scheme: TilingScheme | None = None,
     window_size: int = 5,
-    test_time_augs: int = 0,
+    test_time_augs: int = 5,
     n_steps: int = 500,
-    lr: float = 1.0,
+    lr: float = 0.1,
+    l2_weight: float = 1.0,
+    consistency_weight: float = 0.25,
 ) -> ProbedModel:
     """
     Fit a linear probe from sparse edge corrections and return an adapted model.
 
-    Extracts backbone features for all labeled edges, fits a logistic regression
-    head via full-batch L-BFGS, and returns a ProbedModel wrapping the original backbone.
-    If ``model`` is already a ProbedModel, the new head is warm-started from its current
-    head coefficients; otherwise the head is zero-initialised.
+    Extracts backbone features for labeled edges, fits a logistic regression
+    head via full-batch L-BFGS and returns a ProbedModel wrapping the original
+    backbone. The head is always initialised from the backbone's own head layer
+    (no warm-start across rounds).
+
+    Two regularization terms prevent the probe from disrupting the global solution:
+
+    - **Adaptive L2** (``l2_weight``): penalizes large head weights, scaled inversely
+      with the number of labeled edges so that early rounds are strongly regularized.
+    - **Consistency loss** (``consistency_weight``): anchors the probe's predictions on
+      *unlabeled* edges to the current ILP solution (0/1), preventing local corrections
+      from propagating destructively across the rest of the graph. Scaled the same way.
 
     Parameters
     ----------
@@ -142,6 +152,12 @@ def fit_from_labels(
         Maximum number of L-BFGS iterations (full-batch).
     lr : float
         L-BFGS learning rate.
+    l2_weight : float
+        L2 regularization weight on head.weight (not bias). Effective weight is
+        scaled as ``l2_weight x n_features / n_labels``. Default: 1.0.
+    consistency_weight : float
+        Weight on the ILP-consistency loss for unlabeled edges. Effective weight
+        is scaled as ``consistency_weight x n_features / n_labels``. Default: 0.25.
 
     Returns
     -------
@@ -153,54 +169,79 @@ def fit_from_labels(
 
     dataset = _create_dataset(graph, tiling_scheme, window_size, test_time_augs)
     labeled_dataset = LabeledDataset(dataset, label_mask_key)
-    edge_features_df = extract_edge_features(backbone, labeled_dataset, edge_filter_key=label_mask_key)
-    edge_attrs = graph.edge_attrs(attr_keys=[td.DEFAULT_ATTR_KEYS.EDGE_ID, label_mask_key, label_key]).filter(
-        pl.col(label_mask_key)
-    )
-    edge_attrs = edge_attrs.join(edge_features_df, on=td.DEFAULT_ATTR_KEYS.EDGE_ID, how="inner")
 
-    X = torch.from_numpy(edge_attrs["edge_features"].to_numpy()).float().to(device)
-    y = torch.from_numpy(edge_attrs[label_key].to_numpy()).float().to(device)
+    # No dedup: same edge in multiple windows → multiple feature rows (windowing augmentation).
+    all_features_df = extract_edge_features(backbone, labeled_dataset, edge_filter_key=None)
+
+    all_edge_attrs = graph.edge_attrs(
+        attr_keys=[
+            td.DEFAULT_ATTR_KEYS.EDGE_ID,
+            label_mask_key,
+            label_key,
+            td.DEFAULT_ATTR_KEYS.SOLUTION,
+        ]
+    )
+    labeled_attrs = all_edge_attrs.filter(pl.col(label_mask_key)).join(
+        all_features_df, on=td.DEFAULT_ATTR_KEYS.EDGE_ID, how="inner"
+    )
+    unlabeled_attrs = all_edge_attrs.filter(~pl.col(label_mask_key)).join(
+        all_features_df, on=td.DEFAULT_ATTR_KEYS.EDGE_ID, how="inner"
+    )
+
+    X = labeled_attrs["edge_features"].to_torch().float().to(device)
+    y = labeled_attrs[label_key].to_torch().float().to(device)
+
+    # Consistency target: ILP solution (0/1) on unlabeled edges.
+    X_unlab: torch.Tensor | None = None
+    y_unlab: torch.Tensor | None = None
+    if consistency_weight > 0 and len(unlabeled_attrs) > 0:
+        X_unlab = unlabeled_attrs["edge_features"].to_torch().float().to(device)
+        y_unlab = unlabeled_attrs[td.DEFAULT_ATTR_KEYS.SOLUTION].to_torch().float().to(device)
 
     n_features = X.shape[1]
     head = nn.Linear(n_features, 1)
-    if isinstance(model, ProbedModel):
-        head.weight.data.copy_(model._head.weight.data.cpu())
-        head.bias.data.copy_(model._head.bias.data.cpu())
-        LOG.info("Head warm-started from previous probe")
+    # Always init from backbone head — never warm-start from previous probe.
+    backbone_params = dict(backbone.named_parameters())
+    w = backbone_params.get("head.weight")
+    b = backbone_params.get("head.bias")
+    if w is not None and w.shape == torch.Size([1, n_features]) and b is not None:
+        head.weight.data.copy_(w.detach().cpu())
+        head.bias.data.copy_(b.detach().cpu())
     else:
-        backbone_params = dict(backbone.named_parameters())
-        w = backbone_params.get("head.weight")
-        b = backbone_params.get("head.bias")
-        if w is not None and w.shape == torch.Size([1, n_features]) and b is not None:
-            head.weight.data.copy_(w.detach().cpu())
-            head.bias.data.copy_(b.detach().cpu())
-            LOG.info("Head initialized from backbone 'head' layer")
-        else:
-            nn.init.zeros_(head.weight)
-            nn.init.zeros_(head.bias)
-            LOG.warning("Backbone 'head' not found or shape mismatch — using zero initialization")
+        nn.init.zeros_(head.weight)
+        nn.init.zeros_(head.bias)
+        LOG.warning("Backbone 'head' not found or shape mismatch — using zero initialization")
     head = head.to(device)
 
     n_pos = y.sum().clamp(min=1)
     n_neg = (y.numel() - y.sum()).clamp(min=1)
     criterion = nn.BCEWithLogitsLoss(pos_weight=n_neg / n_pos)
-
     optimizer = torch.optim.LBFGS(head.parameters(), lr=lr, max_iter=n_steps)
+
+    # Adaptive scaling: both terms weaken as more labels arrive.
+    n_labeled = int(graph.edge_attrs(attr_keys=[label_mask_key]).filter(pl.col(label_mask_key)).shape[0])
+    scale = n_features / max(n_labeled, 1)
+    effective_l2 = l2_weight * scale
+    effective_consistency = consistency_weight * scale
 
     head.train()
 
     def closure() -> torch.Tensor:
         optimizer.zero_grad()
         loss = criterion(head(X).squeeze(1), y)
+        if effective_l2 > 0:
+            loss = loss + effective_l2 * (head.weight**2).sum()
+        if effective_consistency > 0 and X_unlab is not None and y_unlab is not None:
+            _eps = 1e-6
+            loss = loss + effective_consistency * nn.functional.binary_cross_entropy_with_logits(
+                head(X_unlab).squeeze(1), y_unlab.clamp(_eps, 1.0 - _eps)
+            )
         loss.backward()
-        print("loss:", loss.item())
         return loss
 
-    LOG.info("Fitting linear probe: %d labeled edges, %d features, %d L-BFGS steps", len(y), n_features, n_steps)
+    LOG.info("Fitting probe: %d labels, %d features, %d steps", len(y), n_features, n_steps)
     optimizer.step(closure)
     head.eval()
-    LOG.info("Linear probe fitted")
 
     probed_model = ProbedModel(backbone, head.weight.data.cpu().numpy()[0], float(head.bias.data.cpu().item()))
     probed_model.to(device)
