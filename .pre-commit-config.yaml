@@ -1,4 +1,7 @@
 ---
+default_language_version:
+  python: python3.12
+
 repos:
 # basic pre-commit
   - repo: https://github.com/pre-commit/pre-commit-hooks

@@ -66,10 +66,7 @@ class LabeledDataset(IterableDataset, Dataset):
             source = self._dataset.iter_items(extra_edge_attrs=extra, **kwargs)
         else:
             # Fall back to map-style traversal.
-            source = (
-                self._dataset.__getitem__(i, extra_edge_attrs=extra, **kwargs)
-                for i in range(len(self._dataset))
-            )
+            source = (self._dataset.__getitem__(i, extra_edge_attrs=extra, **kwargs) for i in range(len(self._dataset)))
 
         for data in source:
             if data[self._label_mask_key].any():
