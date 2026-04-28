@@ -85,12 +85,27 @@ def _make_iterator(
     ds: FrameDataset | TiledRoiDataset | DataLoader,
     device: torch.device,
 ) -> tuple[Callable[[], Iterator], Callable[[torch.Tensor | None], torch.Tensor | None]]:
-    """Return (iterator_fn, expand_dims_fn) adapted for Dataset or DataLoader input."""
-    if not isinstance(ds, DataLoader):
+    """Return (iterator_fn, expand_dims_fn) adapted for Dataset or DataLoader input.
+
+    Supports map-style ``Dataset`` (via ``len`` + ``__getitem__``), pure
+    ``IterableDataset`` (via ``iter(ds)``), and ``DataLoader`` (already batched).
+    """
+    if isinstance(ds, DataLoader):
 
         def _ds_iterator() -> Iterator:
-            for i in tqdm(range(len(ds)), desc="Model inference"):
-                yield ds[i]
+            return ds
+
+        def _expand_dims(tensor: torch.Tensor | None) -> torch.Tensor | None:
+            if tensor is None:
+                return None
+            return tensor.to(device)
+
+    elif isinstance(ds, IterableDataset):
+
+        def _ds_iterator() -> Iterator:
+            total = len(ds) if hasattr(ds, "__len__") else None
+            for item in tqdm(iter(ds), total=total, desc="Model inference"):
+                yield item
 
         def _expand_dims(tensor: torch.Tensor | None) -> torch.Tensor | None:
             if tensor is None:
@@ -100,12 +115,13 @@ def _make_iterator(
     else:
 
         def _ds_iterator() -> Iterator:
-            return ds
+            for i in tqdm(range(len(ds)), desc="Model inference"):
+                yield ds[i]
 
         def _expand_dims(tensor: torch.Tensor | None) -> torch.Tensor | None:
             if tensor is None:
                 return None
-            return tensor.to(device)
+            return tensor.unsqueeze(0).to(device)
 
     return _ds_iterator, _expand_dims
 
