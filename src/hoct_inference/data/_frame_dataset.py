@@ -180,9 +180,7 @@ class _GraphChainDataset(IterableDataset):
             if hasattr(ds, "iter_items"):
                 yield from ds.iter_items(**kwargs)
             elif kwargs:
-                raise TypeError(
-                    f"{type(ds).__name__} does not support iter_items kwargs: {list(kwargs)}"
-                )
+                raise TypeError(f"{type(ds).__name__} does not support iter_items kwargs: {list(kwargs)}")
             else:
                 yield from ds
 
