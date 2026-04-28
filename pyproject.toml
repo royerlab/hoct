@@ -43,15 +43,21 @@ dependencies = [
 correction = [
     "scikit-learn>=1.6.0",
 ]
+bioio = [
+    "bioio>=3.0",
+    "bioio-tifffile>=1.0",
+]
 dev = [
     "pytest>=7.4.0",
     "pytest-cov>=4.1.0",
     "ruff>=0.1.0",
     "pre-commit>=3.5.0",
+    "bioio>=3.0",
+    "bioio-tifffile>=1.0",
 ]
 
 [project.scripts]
-hoct-inference = "hoct_inference.cli:main"
+hoct-inference = "hoct_inference.cli:app"
 
 [tool.hatch.metadata]
 allow-direct-references = true
