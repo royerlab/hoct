@@ -274,6 +274,123 @@ def test_track_mismatched_shapes_fail(tmp_path, model_path):
     assert "does not match" in result.stdout
 
 
+def test_track_ctc_format_writes_label_tiffs_and_track_table(tmp_path, model_path, movie_2d_files):
+    """``-f ctc`` writes a Cell Tracking Challenge folder: per-frame masks + res_track.txt."""
+    img_path, seg_path = movie_2d_files
+    output = tmp_path / "01_RES"
+
+    result = runner.invoke(
+        app,
+        [
+            "track",
+            str(img_path),
+            str(seg_path),
+            "-m",
+            str(model_path),
+            "-o",
+            str(output),
+            "-f",
+            "ctc",
+            "--device",
+            "cpu",
+        ],
+    )
+
+    assert result.exit_code == 0, f"track failed:\n{result.stdout}"
+    assert output.is_dir()
+
+    track_file = output / "res_track.txt"
+    assert track_file.exists(), "CTC export must produce res_track.txt"
+    rows = [line.split() for line in track_file.read_text().splitlines() if line.strip()]
+    assert rows, "res_track.txt should not be empty"
+    # Each row is: tracklet_id start_t end_t parent_id (4 ints)
+    assert all(len(r) == 4 and all(c.lstrip("-").isdigit() for c in r) for r in rows)
+
+    masks = sorted(output.glob("*.tif"))
+    assert len(masks) > 0, "CTC export must write per-frame label TIFFs"
+
+    arr = tifffile.imread(masks[0])
+    # CTC label TIFFs have the spatial shape of the input frames (here: 64x64).
+    assert arr.shape[-2:] == (64, 64), f"unexpected CTC mask shape: {arr.shape}"
+
+
+def test_track_ctc_with_full_graph_is_rejected(tmp_path, model_path, movie_2d_files):
+    """CTC export only makes sense for the solution graph."""
+    img_path, seg_path = movie_2d_files
+    output = tmp_path / "01_RES"
+
+    result = runner.invoke(
+        app,
+        [
+            "track",
+            str(img_path),
+            str(seg_path),
+            "-m",
+            str(model_path),
+            "-o",
+            str(output),
+            "-f",
+            "ctc",
+            "--full-graph",
+            "--device",
+            "cpu",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "only valid for the solution graph" in result.stdout
+
+
+# ---------------------------------------------------------------------------
+# Auto-tiling decision
+# ---------------------------------------------------------------------------
+
+
+class _StubGraph:
+    """Tiny duck-typed stand-in for ``td.graph.BaseGraph`` for the threshold logic."""
+
+    def __init__(self, n_edges: int, n_time: int) -> None:
+        self._n_edges = n_edges
+        self._n_time = n_time
+
+    def num_edges(self) -> int:
+        return self._n_edges
+
+    def time_points(self) -> list[int]:
+        return list(range(self._n_time))
+
+
+def test_auto_tiling_disabled_below_threshold():
+    from hoct_inference.cli import TileMode, _maybe_build_tiling_scheme
+
+    # Just under the 2500 edges/time threshold.
+    scheme = _maybe_build_tiling_scheme(_StubGraph(n_edges=2_499 * 10, n_time=10), TileMode.AUTO)
+    assert scheme is None
+
+
+def test_auto_tiling_enabled_above_threshold():
+    from hoct_inference.cli import TileMode, _maybe_build_tiling_scheme
+
+    scheme = _maybe_build_tiling_scheme(_StubGraph(n_edges=2_501 * 10, n_time=10), TileMode.AUTO)
+    assert scheme is not None
+    assert scheme.tile_shape == (1, 64, 256, 256)
+    assert scheme.overlap_shape == (2, 24, 64, 64)
+
+
+def test_tile_off_returns_none_regardless_of_density():
+    from hoct_inference.cli import TileMode, _maybe_build_tiling_scheme
+
+    assert _maybe_build_tiling_scheme(_StubGraph(n_edges=10**6, n_time=1), TileMode.OFF) is None
+
+
+def test_tile_on_forces_scheme_below_threshold():
+    from hoct_inference.cli import TileMode, _maybe_build_tiling_scheme
+
+    scheme = _maybe_build_tiling_scheme(_StubGraph(n_edges=10, n_time=10), TileMode.ON)
+    assert scheme is not None
+    assert scheme.tile_shape == (1, 64, 256, 256)
+
+
 def test_track_missing_image_path_fails(tmp_path, model_path, movie_2d_files):
     _, seg_path = movie_2d_files
     output = tmp_path / "tracks.geff"

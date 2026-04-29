@@ -1,6 +1,7 @@
 """Command-line interface for hoct-inference."""
 
 import shutil
+from enum import Enum
 from pathlib import Path
 
 import numpy as np
@@ -12,6 +13,7 @@ import yaml
 from hoct_features.graph import create_graph
 from rich.console import Console
 from rich.panel import Panel
+from tracksdata.functional import TilingScheme
 
 from hoct_inference import __version__
 from hoct_inference._api import predict as predict_from_graph
@@ -62,14 +64,105 @@ def _load_jit_model(model_path: Path, device: str) -> torch.jit.ScriptModule:
     return model
 
 
-def _save_graph(graph: td.graph.BaseGraph, output: Path, overwrite: bool) -> None:
-    """Write ``graph`` to ``output`` as a GEFF, deleting an existing path if ``overwrite``."""
+class OutputFormat(str, Enum):
+    """Output formats supported by the CLI."""
+
+    GEFF = "geff"
+    CTC = "ctc"
+
+
+class TileMode(str, Enum):
+    """Tiling decision modes for ``track``."""
+
+    AUTO = "auto"
+    ON = "on"
+    OFF = "off"
+
+
+# Default spatio-temporal tile when tiling is enabled, applied along (t, z, y, x).
+# ``create_graph`` always produces a 4D graph (Z=1 for 2D+t inputs), so a
+# 4-axis tile works in both regimes.
+_DEFAULT_TILE_SHAPE: tuple[int, int, int, int] = (1, 64, 256, 256)
+_DEFAULT_OVERLAP_SHAPE: tuple[int, int, int, int] = (2, 24, 64, 64)
+# When ``--tile auto``, enable tiling above this candidate-edge density.
+_AUTO_TILE_EDGE_DENSITY: float = 2_500.0
+
+
+def _maybe_build_tiling_scheme(
+    candidate_graph: td.graph.BaseGraph,
+    mode: TileMode,
+) -> TilingScheme | None:
+    """Decide whether to tile inference and return the scheme (or None).
+
+    For ``auto`` mode, tiling kicks in when the candidate graph has more than
+    ``_AUTO_TILE_EDGE_DENSITY`` edges per timepoint, which empirically
+    correlates with running out of GPU memory on a single-tile pass.
+    """
+    if mode is TileMode.OFF:
+        return None
+
+    n_edges = candidate_graph.num_edges()
+    n_time = max(len(candidate_graph.time_points()), 1)
+    edge_density = n_edges / n_time
+
+    if mode is TileMode.AUTO:
+        if edge_density <= _AUTO_TILE_EDGE_DENSITY:
+            console.print(f"Auto-tiling: disabled (edges/time = {edge_density:.0f} ≤ {_AUTO_TILE_EDGE_DENSITY:.0f}).")
+            return None
+        console.print(
+            f"Auto-tiling: enabled (edges/time = {edge_density:.0f} > {_AUTO_TILE_EDGE_DENSITY:.0f}); "
+            f"using tile_shape={_DEFAULT_TILE_SHAPE}, overlap_shape={_DEFAULT_OVERLAP_SHAPE} along (t, z, y, x)."
+        )
+    else:  # TileMode.ON
+        console.print(
+            f"Tiling: forced on; using tile_shape={_DEFAULT_TILE_SHAPE}, "
+            f"overlap_shape={_DEFAULT_OVERLAP_SHAPE} along (t, z, y, x)."
+        )
+
+    return TilingScheme(tile_shape=_DEFAULT_TILE_SHAPE, overlap_shape=_DEFAULT_OVERLAP_SHAPE)
+
+
+def _save_graph(
+    graph: td.graph.BaseGraph,
+    output: Path,
+    overwrite: bool,
+    output_format: OutputFormat = OutputFormat.GEFF,
+    shape: tuple[int, ...] | None = None,
+) -> None:
+    """Write ``graph`` to ``output`` in the requested format.
+
+    Parameters
+    ----------
+    graph
+        Graph to serialize.
+    output
+        Destination directory. Removed first when ``overwrite`` is True.
+    overwrite
+        Replace ``output`` if it already exists; otherwise abort.
+    output_format
+        ``geff`` (default) or ``ctc``. CTC writes a Cell Tracking Challenge
+        ground-truth folder (label TIFFs + ``man_track.txt``) using the
+        ``tracklet_id`` node attribute.
+    shape
+        Volume shape ``(T, [Z,] Y, X)`` used by the CTC writer to rasterize
+        masks. Ignored for GEFF; required for CTC unless the graph metadata
+        already carries a ``shape`` entry.
+    """
     if output.exists():
         if not overwrite:
             console.print(f"[red]Output directory {output} already exists. Use --overwrite to overwrite.[/red]")
             raise typer.Exit(code=1)
         shutil.rmtree(output)
-    graph.to_geff(str(output))
+
+    graph.assign_tracklet_ids()
+
+    if output_format is OutputFormat.GEFF:
+        graph.to_geff(str(output))
+    elif output_format is OutputFormat.CTC:
+        graph.to_ctc(output_dir=output, shape=shape, overwrite=True)
+    else:  # pragma: no cover - guarded by Enum
+        raise ValueError(f"Unknown output format: {output_format}")
+
     console.print("[bold green]✓ Results saved successfully![/bold green]")
 
 
@@ -93,7 +186,7 @@ def version_callback(value: bool):
 def predict(
     geff_path: Path = typer.Argument(..., help="Path to GEFF directory", exists=True, dir_okay=True, file_okay=False),
     model_path: Path = typer.Argument(..., help="Path to PyTorch model checkpoint", exists=True, dir_okay=False),
-    output: Path = typer.Option(..., "--output", "-o", help="Output GEFF directory (default: overwrite input)"),
+    output: Path = typer.Option(..., "--output", "-o", help="Output directory"),
     solution: bool = typer.Option(
         False, "--solution", "-s", help="Save solution graph rather the full graph with probabilities"
     ),
@@ -103,6 +196,13 @@ def predict(
     overwrite: bool = typer.Option(False, "--overwrite", "-ow", help="Overwrite output directory"),
     window_size: int = typer.Option(5, "--window", "-w", help="Temporal window size for frame dataset"),
     device: str = typer.Option("cuda", "--device", "-d", help="Device to use: 'cuda', 'mps', or 'cpu'"),
+    output_format: OutputFormat = typer.Option(
+        OutputFormat.GEFF,
+        "--format",
+        "-f",
+        case_sensitive=False,
+        help="Output format: 'geff' (default) or 'ctc' (Cell Tracking Challenge folder).",
+    ),
 ):
     """
     Run model prediction and tracking on a GEFF directory.
@@ -120,7 +220,7 @@ def predict(
 
     if output.exists() and not overwrite:
         console.print(f"[red]Output directory {output} already exists. Use --overwrite to overwrite.[/red]")
-        raise typer.Exit()
+        raise typer.Exit(code=1)
 
     solver_config = _load_solver_config(config_path)
     console.print(f"Solver config: {solver_config.model_dump()}")
@@ -158,7 +258,11 @@ def predict(
     solution_graph = model_predict(model, ds, solver_config=solver_config)
 
     console.print(f"\nSaving results to: {output}")
-    _save_graph(solution_graph if solution else ds.graph, output, overwrite)
+    if output_format is OutputFormat.CTC and not solution:
+        console.print("CTC export uses the solution graph (overriding --solution).")
+    graph_to_save = solution_graph if (solution or output_format is OutputFormat.CTC) else ds.graph
+    shape = ds.graph.metadata.get("shape")
+    _save_graph(graph_to_save, output, overwrite, output_format=output_format, shape=shape)
 
 
 @app.command()
@@ -190,6 +294,22 @@ def track(
         "--scale",
         help="Physical voxel size as 't y x' (2D+t) or 't z y x' (3D+t). Repeat the flag for each value.",
     ),
+    output_format: OutputFormat = typer.Option(
+        OutputFormat.GEFF,
+        "--format",
+        "-f",
+        case_sensitive=False,
+        help="Output format: 'geff' (default) or 'ctc' (Cell Tracking Challenge folder).",
+    ),
+    tile: TileMode = typer.Option(
+        TileMode.AUTO,
+        "--tile",
+        case_sensitive=False,
+        help=(
+            "Tiled inference: 'auto' (default; on if edges/time > 2500), 'on' (force on), "
+            "or 'off' (force off). Tile shape (t, z, y, x) = (1, 64, 256, 256), overlap (2, 24, 64, 64)."
+        ),
+    ),
 ):
     """
     Run end-to-end tracking from raw images and segmentation labels.
@@ -212,6 +332,10 @@ def track(
 
     if image_path.is_dir() != segm_path.is_dir():
         console.print("[red]Image and segmentation paths must use the same layout (both files or both folders).[/red]")
+        raise typer.Exit(code=1)
+
+    if output_format is OutputFormat.CTC and full_graph:
+        console.print("[red]CTC export is only valid for the solution graph; drop --full-graph.[/red]")
         raise typer.Exit(code=1)
 
     solver_config = _load_solver_config(config_path)
@@ -243,12 +367,15 @@ def track(
     )
     console.print(f"Candidate graph: {candidate_graph.num_nodes()} nodes, {candidate_graph.num_edges()} edges")
 
+    tiling_scheme = _maybe_build_tiling_scheme(candidate_graph, tile)
+
     console.print("\n[bold green]Running prediction and tracking...[/bold green]")
     solution_graph = predict_from_graph(
         model,
         graph=candidate_graph,
         solver_config=solver_config,
         window_size=window_size,
+        tiling_scheme=tiling_scheme,
         return_solution=True,
     )
 
@@ -257,7 +384,11 @@ def track(
         raise typer.Exit(code=1)
 
     console.print(f"\nSaving results to: {output}")
-    _save_graph(candidate_graph if full_graph else solution_graph, output, overwrite)
+    graph_to_save = candidate_graph if full_graph else solution_graph
+    # ``create_graph`` records a 4D (T, Z, Y, X) shape in metadata even for 2D+t
+    # inputs, so we prefer that over ``labels.shape`` for the CTC writer.
+    shape = candidate_graph.metadata.get("shape", labels.shape)
+    _save_graph(graph_to_save, output, overwrite, output_format=output_format, shape=shape)
 
 
 @app.command()
