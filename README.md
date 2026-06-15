@@ -120,10 +120,12 @@ uvx --from "hoct[bioio]" hoct track ... -c solver_config.yaml
 ### Tracking from an existing GEFF
 
 If you already have a candidate graph in GEFF form (e.g. produced by
-`hoct.features.create_graph`), use `predict` instead of `track`:
+`hoct.features.create_graph`), use `predict` instead of `track`. Pass `-s` to
+write just the tracking solution; omit it to keep the full candidate graph with
+predicted scores:
 
 ```bash
-uvx --from hoct hoct predict candidate.geff -o tracks.geff
+uvx --from hoct hoct predict candidate.geff -s -o tracks.geff
 ```
 
 ---

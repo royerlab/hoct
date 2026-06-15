@@ -19,7 +19,7 @@ from hoct._api import predict as predict_from_graph
 from hoct._io import load_array
 from hoct._models import DEFAULT_MODEL, resolve_model
 from hoct.data import FrameDataset
-from hoct.features import create_graph
+from hoct.features import REGIONPROPS, create_graph
 from hoct.inference import model_predict
 from hoct.tracking import ILPSolverConfig
 
@@ -203,7 +203,7 @@ def predict(
     ),
     output: Path = typer.Option(..., "--output", "-o", help="Output directory"),
     solution: bool = typer.Option(
-        False, "--solution", "-s", help="Save solution graph rather the full graph with probabilities"
+        False, "--solution", "-s", help="Save the solution graph rather than the full graph with probabilities"
     ),
     config_path: Path | None = typer.Option(
         None, "--config", "-c", help="Path to ILP solver config YAML file", exists=True, dir_okay=False
@@ -242,15 +242,9 @@ def predict(
 
     console.print(f"\nLoading GEFF from: {geff_path}")
     graph, _ = td.graph.InMemoryGraph.from_geff(str(geff_path))
-    properties = [
-        "equivalent_diameter_area",
-        "intensity_min",
-        "intensity_max",
-        "intensity_mean",
-        "intensity_std",
-        "inertia_tensor",
-        "border_dist",
-    ]
+    # Same feature set (and order) used to build the candidate graph, so the
+    # model receives node features consistent with training.
+    properties = list(REGIONPROPS)
 
     _fix_inertia_tensor(graph)
 
