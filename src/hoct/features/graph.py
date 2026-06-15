@@ -1,4 +1,5 @@
 from functools import partial
+from typing import Any
 
 import dask.array as da
 import numpy as np
@@ -9,7 +10,7 @@ from tracksdata.nodes._mask import Mask
 from tracksdata.utils._multiprocessing import multiprocessing_apply
 
 from hoct.features.constants import EDGE_GT_KEY, REGIONPROPS
-from hoct.features.features import add_border_dist, add_delta_t, add_is_div
+from hoct.features.features import add_border_dist, add_delta_t, add_is_div, normalize_image
 
 
 def convert_to_3d(graph: td.graph.RustWorkXGraph) -> None:
@@ -69,6 +70,8 @@ def create_graph(
     delta_t: float,
     scale: tuple[float, ...] | None = None,
     images: ArrayLike | None = None,
+    normalize_images: bool = True,
+    normalize_kwargs: dict[str, Any] | None = None,
     gt_graph: td.graph.BaseGraph | None = None,
     out_graph: td.graph.BaseGraph | None = None,
 ) -> td.graph.InMemoryGraph:
@@ -92,6 +95,13 @@ def create_graph(
     images : ArrayLike | None
         Optional intensity images of shape (T, [Z,] Y, X).
         If None, only geometric features are computed.
+    normalize_images : bool, default=True
+        If True and ``images`` is provided, normalize each time point with
+        :func:`hoct.features.normalize_image` before extracting intensity
+        features. Has no effect when ``images`` is None.
+    normalize_kwargs : dict[str, Any] | None
+        Keyword arguments forwarded to :func:`hoct.features.normalize_image`
+        (e.g. ``clip``, ``uq``). Defaults to an empty dict.
     gt_graph : td.graph.BaseGraph | None
         Optional ground truth graph for training. If provided, adds ground truth edge labels.
         If None (inference mode), skips ground truth-related features.
@@ -122,6 +132,12 @@ def create_graph(
 
     if images is not None and not isinstance(images, da.Array):
         images = da.from_array(images)
+
+    if images is not None and normalize_images:
+        images = images.rechunk((1, *images.shape[1:]))
+        if normalize_kwargs is None:
+            normalize_kwargs = {}
+        images = images.map_blocks(normalize_image, **normalize_kwargs)
 
     if scale is None:
         scale = (1.0,) * labels.ndim
