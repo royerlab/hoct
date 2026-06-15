@@ -54,4 +54,7 @@ Thumbs.db
 *.jit
 
 # package version
-src/hoct_inference/__about__.py
+src/hoct/__about__.py
+
+# local test data (CTC datasets + generated GEFF fixtures)
+.test-data/

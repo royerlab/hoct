@@ -1,6 +1,6 @@
-# HOCT Inference
+# HOCT
 
-Inference API and CLI for the Higher-Order Cell Tracking Transformer (HOCT)
+Inference and tracking for the Higher-Order Cell Tracking Transformer (HOCT)
 model with JIT-compiled models.
 
 ---
@@ -35,7 +35,7 @@ uv --version
 installed permanently and there is no virtual environment to manage:
 
 ```bash
-uvx --from "hoct-inference[bioio]" hoct-inference track \
+uvx --from "hoct[bioio]" hoct track \
     <IMAGES> <SEGMENTATION> \
     -m <MODEL.pt> \
     -o <OUTPUT.geff>
@@ -59,7 +59,7 @@ start almost instantly.
 ### Example: a CTC dataset
 
 ```bash
-uvx --from "hoct-inference[bioio]" hoct-inference track \
+uvx --from "hoct[bioio]" hoct track \
     /data/Fluo-C3DL-MDA231/01 \
     /data/Fluo-C3DL-MDA231/01_ERR_SEG \
     -m weights/hoct.pt \
@@ -74,7 +74,7 @@ To benchmark against the Cell Tracking Challenge ground truth, write the
 result directly in CTC format:
 
 ```bash
-uvx --from "hoct-inference[bioio]" hoct-inference track \
+uvx --from "hoct[bioio]" hoct track \
     /data/Fluo-C3DL-MDA231/01 \
     /data/Fluo-C3DL-MDA231/01_ERR_SEG \
     -m weights/hoct.pt \
@@ -103,7 +103,7 @@ This produces the standard CTC layout (`maskNNN.tif` per timepoint plus
 | `--window, -w` | `5` | Temporal window size used by the model |
 | `--config, -c` | none | Path to an ILP solver config YAML (see `init-config`) |
 
-Run `uvx --from "hoct-inference[bioio]" hoct-inference track --help` for
+Run `uvx --from "hoct[bioio]" hoct track --help` for
 the full list.
 
 ### Customising the solver
@@ -111,39 +111,59 @@ the full list.
 Generate a template config you can edit and pass with `-c`:
 
 ```bash
-uvx --from hoct-inference hoct-inference init-config -o solver_config.yaml
+uvx --from hoct hoct init-config -o solver_config.yaml
 # ...edit the file...
-uvx --from "hoct-inference[bioio]" hoct-inference track ... -c solver_config.yaml
+uvx --from "hoct[bioio]" hoct track ... -c solver_config.yaml
 ```
 
 ### Tracking from an existing GEFF
 
 If you already have a candidate graph in GEFF form (e.g. produced by
-`hoct-features`), use `predict` instead of `track`:
+`hoct.features.create_graph`), use `predict` instead of `track`:
 
 ```bash
-uvx --from hoct-inference hoct-inference predict \
+uvx --from hoct hoct predict \
     candidate.geff weights/hoct.pt -o tracks.geff
 ```
 
 ---
 
+## Installation
+
+```bash
+pip install "hoct[bioio]"
+```
+
+The `bioio` extra is needed for the `track` CLI (reading image/label files).
+
 ## Installation (for developers)
 
 ```bash
-# From the monorepo root
-uv sync
-
-# Or install directly with the bioio extra (needed for the `track` CLI)
-pip install -e "hoct_inference[bioio]"
+git clone https://github.com/royerlab/hoct
+cd hoct
+uv sync --extra dev --extra bioio
 ```
+
+### Test data
+
+Most of the suite runs on tiny synthetic inputs. The data/tracking tests need
+candidate-graph GEFF fixtures built from two small Cell Tracking Challenge
+training sets; they are skipped until you build them:
+
+```bash
+uv run python scripts/prepare_test_data.py
+```
+
+This downloads the datasets into `.test-data/` (gitignored) and writes the GEFF
+fixtures. To use existing graphs instead, point `HOCT_TEST_GEFF_2D` /
+`HOCT_TEST_GEFF_3D` at them.
 
 ## Python API
 
 ```python
 import torch
 import numpy as np
-from hoct_inference import predict
+from hoct import predict
 
 model = torch.jit.load("hoct.pt")
 
@@ -155,16 +175,12 @@ solution_graph = predict(model, labels=labels, images=images)
 solution_graph.to_geff("tracks.geff")
 ```
 
-See `hoct_inference.predict` for the full signature (custom solver config,
+See `hoct.predict` for the full signature (custom solver config,
 tiled inference, test-time augmentation, etc.).
 
 ## Development
 
 ```bash
-# Install development dependencies
-cd hoct_inference
-uv sync --extra dev --extra bioio
-
 # Run tests
 pytest
 

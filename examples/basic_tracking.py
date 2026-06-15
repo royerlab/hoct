@@ -6,10 +6,10 @@ import napari
 import torch
 import tracksdata as td
 from dask.array.image import imread
-from hoct_features.features import normalize_image
 
-from hoct_inference import predict
-from hoct_inference.tracking import ILPSolverConfig
+from hoct import predict
+from hoct.features import normalize_image
+from hoct.tracking import ILPSolverConfig
 
 
 def main():

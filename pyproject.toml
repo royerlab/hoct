@@ -3,9 +3,9 @@ requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
 [project]
-name = "hoct-inference"
-version = "0.1.0"
-description = "Inference API and CLI for Higher-Order Cell Tracking Transformer (HOCT) model with JIT-compiled models"
+name = "hoct"
+dynamic = ["version"]
+description = "Inference and tracking for the Higher-Order Cell Tracking Transformer (HOCT) model"
 readme = "README.md"
 authors = [
     { name = "Jordao Bragantini", email = "jordao.bragantini@czbiohub.org" }
@@ -25,19 +25,26 @@ classifiers = [
 ]
 dependencies = [
     "numpy>=1.24.0",
-    "torch>=2.0.0",
+    "scipy>=1.11.0",
+    "scikit-image>=0.21.0",
+    "h5py>=3.9.0",
+    "toolz>=0.11.0",
+    "dask[array]>=2022.3.0",
     "polars>=1.0.0",
+    "torch>=2.0.0",
     "spatial-graph>=0.0.5",
-    "tracksdata",
-    "hoct-features>=0.1.0",
+    "tracksdata>=0.1.0rc4",
     "pydantic>=2.12.5",
     "pyyaml>=6.0.3",
     "typer>=0.21.1",
     "rich>=14.3.1",
-    "dask",
     "gurobipy>12.0.1,<13.0.0",
     "matplotlib>=3.10.8",
 ]
+
+[project.urls]
+Homepage = "https://github.com/royerlab/hoct"
+Repository = "https://github.com/royerlab/hoct"
 
 [project.optional-dependencies]
 correction = [
@@ -54,10 +61,11 @@ dev = [
     "pre-commit>=3.5.0",
     "bioio>=3.0",
     "bioio-tifffile>=1.0",
+    "scikit-learn>=1.6.0",
 ]
 
 [project.scripts]
-hoct-inference = "hoct_inference.cli:app"
+hoct = "hoct.cli:app"
 
 [tool.hatch.metadata]
 allow-direct-references = true
@@ -66,7 +74,11 @@ allow-direct-references = true
 source = "vcs"
 
 [tool.hatch.build.hooks.vcs]
-version-file = "src/hoct_inference/__about__.py"
+version-file = "src/hoct/__about__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/hoct"]
+exclude = ["src/hoct/_tests"]
 
 # https://docs.astral.sh/ruff
 [tool.ruff]
@@ -94,7 +106,7 @@ select = [
 
 [tool.ruff.lint.per-file-ignores]
 "_tests/*.py" = ["D", "S"]
-"src/hoct_inference/cli.py" = ["B008"]
+"src/hoct/cli.py" = ["B008"]
 
 # https://docs.astral.sh/ruff/formatter/
 [tool.ruff.format]
@@ -103,4 +115,4 @@ skip-magic-trailing-comma = false
 
 [tool.pytest.ini_options]
 minversion = "7.0"
-testpaths = ["src/hoct_inference/_tests"]
+testpaths = ["src/hoct/_tests"]
