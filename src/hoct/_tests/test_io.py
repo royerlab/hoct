@@ -4,6 +4,7 @@ TIFF and Zarr inputs are read with always-available dependencies, so these
 tests do not require the optional ``bioio`` extra.
 """
 
+import dask.array as da
 import numpy as np
 import pytest
 import tifffile
@@ -96,13 +97,14 @@ def test_load_tiff_keeps_first_channel(tmp_path):
 
 
 def test_load_simple_zarr_2d(tmp_path):
-    """A plain (T, Y, X) Zarr array round-trips unchanged."""
+    """A plain (T, Y, X) Zarr array round-trips unchanged as a lazy dask array."""
     arr = np.arange(4 * 8 * 8, dtype=np.uint16).reshape(4, 8, 8)
     path = tmp_path / "movie.zarr"
     _write_zarr_array(path, arr)
 
     result = load_array(path)
 
+    assert isinstance(result, da.Array), "Zarr should load lazily via dask"
     assert result.shape == (4, 8, 8)
     np.testing.assert_array_equal(result, arr)
 
@@ -125,13 +127,14 @@ def test_load_simple_zarr_collapses_singleton_axes(tmp_path):
 
 
 def test_load_ome_zarr_collapses_to_2d(tmp_path):
-    """A (t, c=1, z=1, y, x) OME-Zarr collapses to (T, Y, X)."""
+    """A (t, c=1, z=1, y, x) OME-Zarr collapses to (T, Y, X), loaded lazily."""
     arr = np.arange(4 * 1 * 1 * 8 * 8, dtype=np.uint16).reshape(4, 1, 1, 8, 8)
     path = tmp_path / "movie.ome.zarr"
     _write_ome_zarr(path, arr, "tczyx")
 
     result = load_array(path)
 
+    assert isinstance(result, da.Array), "OME-Zarr should load lazily via dask"
     assert result.shape == (4, 8, 8)
     np.testing.assert_array_equal(result, arr[:, 0, 0])
 
@@ -177,7 +180,7 @@ def test_ome_zarr_group_without_multiscales_raises(tmp_path):
 
 
 def test_load_folder_of_2d_frames(tmp_path):
-    """Folder of YX frames stacks alphabetically into (T, Y, X)."""
+    """Folder of YX frames stacks alphabetically into a lazy (T, Y, X) array."""
     folder = tmp_path / "frames"
     folder.mkdir()
     frames = [np.full((8, 8), t, dtype=np.uint8) for t in range(5)]
@@ -186,6 +189,9 @@ def test_load_folder_of_2d_frames(tmp_path):
 
     result = load_array(folder)
 
+    assert isinstance(result, da.Array), "a folder of TIFFs should load lazily via dask"
+    # One dask chunk per frame, so frames load on demand rather than all at once.
+    assert result.chunks[0] == (1,) * 5
     assert result.shape == (5, 8, 8)
     for t in range(5):
         np.testing.assert_array_equal(result[t], frames[t])
