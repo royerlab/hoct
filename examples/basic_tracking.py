@@ -1,13 +1,11 @@
 """Basic example of cell tracking with HOCT."""
 
-from pathlib import Path
-
 import napari
 import torch
 import tracksdata as td
 from dask.array.image import imread
 
-from hoct import predict
+from hoct import load_model, predict
 from hoct.features import normalize_image
 from hoct.tracking import ILPSolverConfig
 
@@ -23,10 +21,9 @@ def main():
     images = images.rechunk((1, *images.shape[1:]))  # (one chunk per time point)
     images = images.map_blocks(normalize_image)
 
-    # Load model
-    model_path = Path(__file__).parent.parent / "weights" / "2026_01_30_09_23_41_job_26961657.pt"
+    # Load the default pre-trained model (downloaded and cached on first use).
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    model = torch.jit.load(model_path, map_location=device)
+    model = load_model(device=device)
 
     # optionally provide the ilp solver config, it could be None for default config
     solver_config = ILPSolverConfig(

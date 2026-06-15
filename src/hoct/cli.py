@@ -17,6 +17,7 @@ from tracksdata.functional import TilingScheme
 from hoct import __version__
 from hoct._api import predict as predict_from_graph
 from hoct._io import load_array
+from hoct._models import DEFAULT_MODEL, resolve_model
 from hoct.data import FrameDataset
 from hoct.features import create_graph
 from hoct.inference import model_predict
@@ -55,13 +56,16 @@ def _load_solver_config(config_path: Path | None) -> ILPSolverConfig:
     return ILPSolverConfig(**config_dict)
 
 
-def _load_jit_model(model_path: Path, device: str) -> torch.jit.ScriptModule:
-    """Load a JIT-compiled model on ``device`` and put it in eval mode."""
+def _load_jit_model(model: Path | str | None, device: str) -> torch.jit.ScriptModule:
+    """Resolve a model (path, registered name, or default) and load it in eval mode."""
+    if model is None:
+        console.print(f"No model given; using default pre-trained model: {DEFAULT_MODEL}")
+    model_path = resolve_model(model)
     console.print(f"\nLoading model from: {model_path}")
-    model = torch.jit.load(model_path, map_location=device).to(device)
-    model.eval()
+    module = torch.jit.load(model_path, map_location=device).to(device)
+    module.eval()
     console.print(f"Model loaded on device: {device}")
-    return model
+    return module
 
 
 class OutputFormat(str, Enum):
@@ -185,7 +189,11 @@ def version_callback(value: bool):
 @app.command()
 def predict(
     geff_path: Path = typer.Argument(..., help="Path to GEFF directory", exists=True, dir_okay=True, file_okay=False),
-    model_path: Path = typer.Argument(..., help="Path to PyTorch model checkpoint", exists=True, dir_okay=False),
+    model_path: Path | None = typer.Argument(
+        None,
+        help=f"Checkpoint path or registered model name. Default: '{DEFAULT_MODEL}' (auto-downloaded).",
+        dir_okay=False,
+    ),
     output: Path = typer.Option(..., "--output", "-o", help="Output directory"),
     solution: bool = typer.Option(
         False, "--solution", "-s", help="Save solution graph rather the full graph with probabilities"
@@ -269,8 +277,12 @@ def predict(
 def track(
     image_path: Path = typer.Argument(..., help="Path to image (file or folder of frames)", exists=True),
     segm_path: Path = typer.Argument(..., help="Path to segmentation labels (same format as image)", exists=True),
-    model_path: Path = typer.Option(
-        ..., "--model", "-m", help="Path to JIT-compiled model checkpoint", exists=True, dir_okay=False
+    model_path: Path | None = typer.Option(
+        None,
+        "--model",
+        "-m",
+        help=f"Checkpoint path or registered model name. Default: '{DEFAULT_MODEL}' (auto-downloaded).",
+        dir_okay=False,
     ),
     output: Path = typer.Option(..., "--output", "-o", help="Output GEFF directory"),
     overwrite: bool = typer.Option(False, "--overwrite", "-ow", help="Overwrite output directory"),
