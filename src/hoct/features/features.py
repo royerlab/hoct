@@ -57,8 +57,21 @@ def normalize_image(
     clip: bool = False,
     uq: float = 0.999,
 ) -> NDArray:
-    """
-    Normalize an image to [0, 1] using the quantile.
+    """Normalize an image to ``[0, 1]`` using an upper quantile.
+
+    Parameters
+    ----------
+    image : NDArray
+        Image to normalize.
+    clip : bool, default=False
+        If True, clip the normalized values to ``[0, 1]``.
+    uq : float, default=0.999
+        Upper quantile used as the normalization maximum (robust to outliers).
+
+    Returns
+    -------
+    NDArray
+        The normalized image as ``float32``.
     """
     image = np.asarray(image, dtype=np.float32)
 
