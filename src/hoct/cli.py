@@ -16,7 +16,7 @@ from tracksdata.functional import TilingScheme
 
 from hoct import __version__
 from hoct._api import predict as predict_from_graph
-from hoct._io import load_array
+from hoct._io import is_frame_folder, load_array
 from hoct._models import DEFAULT_MODEL, resolve_model
 from hoct.data import FrameDataset
 from hoct.features import REGIONPROPS, create_graph
@@ -277,7 +277,9 @@ def predict(
 
 @app.command()
 def track(
-    image_path: Path = typer.Argument(..., help="Path to image (file or folder of frames)", exists=True),
+    image_path: Path = typer.Argument(
+        ..., help="Path to image (TIFF, Zarr/OME-Zarr, or folder of frames)", exists=True
+    ),
     segm_path: Path = typer.Argument(..., help="Path to segmentation labels (same format as image)", exists=True),
     model_path: Path | None = typer.Option(
         None,
@@ -331,9 +333,10 @@ def track(
     Reads the images and segmentation, builds the candidate graph, runs the
     model, solves tracking, and writes a GEFF directory.
 
-    Both inputs accept either a single file (whole time series) or a folder
-    of single-frame files (sorted alphabetically). They must use the same
-    layout — file with file, or folder with folder.
+    Both inputs accept a single file (TIFF), a Zarr/OME-Zarr store (whole time
+    series), or a folder of single-frame files (sorted alphabetically). They
+    must use the same layout — single input with single input, or frame folder
+    with frame folder.
 
     Example:
         hoct track images.tif segmentation.tif -m model.pt -o tracks.geff
@@ -344,8 +347,11 @@ def track(
         console.print(f"[red]Output directory {output} already exists. Use --overwrite to overwrite.[/red]")
         raise typer.Exit(code=1)
 
-    if image_path.is_dir() != segm_path.is_dir():
-        console.print("[red]Image and segmentation paths must use the same layout (both files or both folders).[/red]")
+    if is_frame_folder(image_path) != is_frame_folder(segm_path):
+        console.print(
+            "[red]Image and segmentation paths must use the same layout "
+            "(both single inputs or both frame folders).[/red]"
+        )
         raise typer.Exit(code=1)
 
     if output_format is OutputFormat.CTC and full_graph:
