@@ -10,9 +10,8 @@ from typer.testing import CliRunner
 
 pytest.importorskip("bioio")  # CLI requires the bioio extra
 
+from hoct._tests.conftest import MODEL_PATH
 from hoct.cli import app
-
-MODEL_PATH = Path(__file__).resolve().parents[3] / "weights" / "2026_01_30_09_23_41_job_26961657.pt"
 
 runner = CliRunner()
 

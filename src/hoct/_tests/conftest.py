@@ -18,3 +18,17 @@ requires_geff_data = pytest.mark.skipif(
     not (Path(GEFF_2D).exists() and Path(GEFF_3D).exists()),
     reason="GEFF test data not available (set HOCT_TEST_GEFF_2D / HOCT_TEST_GEFF_3D)",
 )
+
+# Pre-trained checkpoint used by the inference tests. Defaults to the weights
+# kept under `weights/general_v0.pt`; override with HOCT_TEST_MODEL.
+MODEL_PATH = Path(
+    os.environ.get(
+        "HOCT_TEST_MODEL",
+        str(Path(__file__).resolve().parents[3] / "weights" / "general_v0.pt"),
+    )
+)
+
+requires_model = pytest.mark.skipif(
+    not MODEL_PATH.exists(),
+    reason="pre-trained model not available (set HOCT_TEST_MODEL or place weights/general_v0.pt)",
+)

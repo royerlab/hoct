@@ -132,6 +132,8 @@ def _save_graph(
     overwrite: bool,
     output_format: OutputFormat = OutputFormat.GEFF,
     shape: tuple[int, ...] | None = None,
+    *,
+    is_solution: bool = True,
 ) -> None:
     """Write ``graph`` to ``output`` in the requested format.
 
@@ -151,6 +153,10 @@ def _save_graph(
         Volume shape ``(T, [Z,] Y, X)`` used by the CTC writer to rasterize
         masks. Ignored for GEFF; required for CTC unless the graph metadata
         already carries a ``shape`` entry.
+    is_solution
+        Whether ``graph`` is a solved tracking graph (one parent per node).
+        Tracklet ids are only assigned for solution graphs; the full candidate
+        graph is not a lineage and would fail ``assign_tracklet_ids``.
     """
     if output.exists():
         if not overwrite:
@@ -158,7 +164,8 @@ def _save_graph(
             raise typer.Exit(code=1)
         shutil.rmtree(output)
 
-    graph.assign_tracklet_ids()
+    if is_solution:
+        graph.assign_tracklet_ids()
 
     if output_format is OutputFormat.GEFF:
         graph.to_geff(str(output))
@@ -268,9 +275,10 @@ def predict(
     console.print(f"\nSaving results to: {output}")
     if output_format is OutputFormat.CTC and not solution:
         console.print("CTC export uses the solution graph (overriding --solution).")
-    graph_to_save = solution_graph if (solution or output_format is OutputFormat.CTC) else ds.graph
+    is_solution = solution or output_format is OutputFormat.CTC
+    graph_to_save = solution_graph if is_solution else ds.graph
     shape = ds.graph.metadata.get("shape")
-    _save_graph(graph_to_save, output, overwrite, output_format=output_format, shape=shape)
+    _save_graph(graph_to_save, output, overwrite, output_format=output_format, shape=shape, is_solution=is_solution)
 
 
 @app.command()
@@ -400,7 +408,7 @@ def track(
     # ``create_graph`` records a 4D (T, Z, Y, X) shape in metadata even for 2D+t
     # inputs, so we prefer that over ``labels.shape`` for the CTC writer.
     shape = candidate_graph.metadata.get("shape", labels.shape)
-    _save_graph(graph_to_save, output, overwrite, output_format=output_format, shape=shape)
+    _save_graph(graph_to_save, output, overwrite, output_format=output_format, shape=shape, is_solution=not full_graph)
 
 
 @app.command()
