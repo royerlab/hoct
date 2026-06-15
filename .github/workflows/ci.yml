@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # Pin ruff to the version used by the pre-commit hooks so CI matches the
+      # project's lint baseline.
+      - name: Lint with ruff
+        run: |
+          uvx ruff@0.11.12 check .
+          uvx ruff@0.11.12 format --check .
+
+  test:
+    needs: lint
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      # GEFF fixtures, model weights, and a Gurobi license are not provisioned in
+      # CI, so the data/model/solver tests skip; the unit tests and the
+      # download mechanism (served from a local HTTP server) still run.
+      - name: Run tests with coverage
+        run: uv run pytest --cov=hoct --cov-report=xml -q
+
+      - name: Upload coverage to Codecov
+        if: matrix.python-version == '3.12' && github.repository == 'royerlab/hoct'
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
