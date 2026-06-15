@@ -1,0 +1,107 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      test_release:
+        description: 'Test release (skips PyPI publish)'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # required for hatch-vcs to read git tags/history
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Run tests
+        run: uv run pytest -q
+
+      - name: Build package
+        run: uv build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    # Only publish from the main repo and not for dry-run releases.
+    if: github.repository == 'royerlab/hoct' && github.event.inputs.test_release != 'true'
+    environment:
+      name: pypi
+      url: https://pypi.org/p/hoct
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          attestations: true
+
+  test-release:
+    needs: build
+    runs-on: ubuntu-latest
+    # Dry run for workflow_dispatch test releases or forks.
+    if: github.event.inputs.test_release == 'true' || github.repository != 'royerlab/hoct'
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Test PyPI upload (dry run)
+        run: |
+          echo "🧪 This would upload to PyPI:"
+          ls -la dist/
+          echo "✅ Test release completed successfully!"
+
+  github-release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.repository == 'royerlab/hoct' && github.event.inputs.test_release != 'true'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
