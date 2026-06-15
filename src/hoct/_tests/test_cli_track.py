@@ -6,9 +6,8 @@ import numpy as np
 import pytest
 import tifffile
 import tracksdata as td
+import zarr
 from typer.testing import CliRunner
-
-pytest.importorskip("bioio")  # CLI requires the bioio extra
 
 from hoct._tests.conftest import MODEL_PATH
 from hoct.cli import app
@@ -45,6 +44,21 @@ def _write_folder(folder: Path, stack: np.ndarray, frame_axes: str) -> None:
         _write_imagej_tiff(folder / f"frame_{t:03d}.tif", frame, frame_axes)
 
 
+def _write_ome_zarr(path: Path, stack: np.ndarray) -> None:
+    """Write a (T, Y, X) stack as an OME-Zarr group with (t, c, z, y, x) axes."""
+    data = stack[:, np.newaxis, np.newaxis]  # (T, 1, 1, Y, X)
+    group = zarr.open_group(str(path), mode="w")
+    level = group.create_array("0", shape=data.shape, dtype=data.dtype)
+    level[:] = data
+    group.attrs["multiscales"] = [
+        {
+            "version": "0.4",
+            "axes": [{"name": name} for name in "tczyx"],
+            "datasets": [{"path": "0"}],
+        }
+    ]
+
+
 @pytest.fixture
 def model_path() -> Path:
     if not MODEL_PATH.exists():
@@ -60,6 +74,17 @@ def movie_2d_files(tmp_path):
     seg_path = tmp_path / "segm.tif"
     _write_imagej_tiff(img_path, images, "TYX")
     _write_imagej_tiff(seg_path, labels, "TYX")
+    return img_path, seg_path
+
+
+@pytest.fixture
+def movie_2d_ome_zarr(tmp_path):
+    """OME-Zarr (t, c=1, z=1, y, x) image and segmentation stores."""
+    images, labels = _make_2d_movie()
+    img_path = tmp_path / "image.ome.zarr"
+    seg_path = tmp_path / "segm.ome.zarr"
+    _write_ome_zarr(img_path, images)
+    _write_ome_zarr(seg_path, labels)
     return img_path, seg_path
 
 
@@ -111,6 +136,27 @@ def test_track_single_file_runs_end_to_end(tmp_path, model_path, movie_2d_files)
     assert "Building candidate tracking graph" in result.stdout
     assert "Results saved successfully" in result.stdout
     _assert_solution_geff(output)
+
+
+def test_track_ome_zarr_inputs_match_single_file(tmp_path, model_path, movie_2d_files, movie_2d_ome_zarr):
+    """OME-Zarr (t, c, z, y, x) input produces the same solution as the equivalent TIFF."""
+    file_img, file_seg = movie_2d_files
+    zarr_img, zarr_seg = movie_2d_ome_zarr
+
+    out_file = tmp_path / "from_file.geff"
+    out_zarr = tmp_path / "from_zarr.geff"
+
+    for img, seg, out in [(file_img, file_seg, out_file), (zarr_img, zarr_seg, out_zarr)]:
+        result = runner.invoke(
+            app,
+            ["track", str(img), str(seg), "-m", str(model_path), "-o", str(out), "--device", "cpu"],
+        )
+        assert result.exit_code == 0, f"track failed for {img}:\n{result.stdout}"
+
+    g_file = _assert_solution_geff(out_file)
+    g_zarr = _assert_solution_geff(out_zarr)
+    assert g_file.num_nodes() == g_zarr.num_nodes()
+    assert g_file.num_edges() == g_zarr.num_edges()
 
 
 def test_track_folder_inputs_match_single_file(tmp_path, model_path, movie_2d_files, movie_2d_folders):
