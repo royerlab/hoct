@@ -157,8 +157,6 @@ class TrackletSolver(ILPSolver):
             list(tracklet_edges_df.iter_rows(named=True)),
         )
 
-        tracklet_graph.summary(attrs_stats=True)
-
         tracklet_invalid_edges = tracklet_graph.edge_attrs().filter(pl.col("delta_t") <= 0)
         if len(tracklet_invalid_edges) > 0:
             raise ValueError(
