@@ -59,8 +59,30 @@ class TestResolveModel:
         with pytest.raises(FileNotFoundError):
             _models.resolve_model(tmp_path / "missing.pt")
 
-    def test_available_models_includes_default(self):
+    def test_general_v1_is_default(self):
+        assert _models.DEFAULT_MODEL == "general_v1"
         assert _models.DEFAULT_MODEL in _models.available_models()
+
+    @pytest.mark.parametrize(
+        ("name", "release", "sha256"),
+        [
+            (
+                "general_v1",
+                "weights-v1",
+                "5bd836dfcb15ad796ea79a9595841a3e73b650a71c4acba3fc66aac65d745b33",
+            ),
+            (
+                "ctc_v0",
+                "weights-v0",
+                "b9be3d976e2d51ae946128ded99142a81b5ba99fb87a0da67c38de2934944000",
+            ),
+        ],
+    )
+    def test_published_model_is_registered(self, name: str, release: str, sha256: str):
+        assert _models.MODELS[name] == {
+            "url": f"https://github.com/royerlab/hoct/releases/download/{release}/{name}.pt",
+            "sha256": sha256,
+        }
 
 
 class TestModelDownload:
