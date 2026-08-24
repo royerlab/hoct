@@ -15,19 +15,27 @@ from pathlib import Path
 import pooch
 import torch
 
-# Base URL for release assets. Bump the tag when publishing new weights.
-_RELEASE_BASE = "https://github.com/royerlab/hoct/releases/download/weights-v0"
+# Base URL for release assets. Each model URL includes its weights release tag.
+_RELEASES_BASE = "https://github.com/royerlab/hoct/releases/download"
 
 # Registry of distributed models: name -> {url, sha256}.
 MODELS: dict[str, dict[str, str]] = {
+    "general_v1": {
+        "url": f"{_RELEASES_BASE}/weights-v1/general_v1.pt",
+        "sha256": "5bd836dfcb15ad796ea79a9595841a3e73b650a71c4acba3fc66aac65d745b33",
+    },
+    "ctc_v0": {
+        "url": f"{_RELEASES_BASE}/weights-v0/ctc_v0.pt",
+        "sha256": "b9be3d976e2d51ae946128ded99142a81b5ba99fb87a0da67c38de2934944000",
+    },
     "general_v0": {
-        "url": f"{_RELEASE_BASE}/general_v0.pt",
+        "url": f"{_RELEASES_BASE}/weights-v0/general_v0.pt",
         "sha256": "024c2e4606275c96667907abfc9e0c27487b543480caf99d9ebd1d267cef8e4a",
     },
 }
 
 #: Model used when none is specified.
-DEFAULT_MODEL = "general_v0"
+DEFAULT_MODEL = "general_v1"
 
 
 def available_models() -> list[str]:

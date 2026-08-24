@@ -52,7 +52,8 @@ uvx --from "hoct[bioio]" hoct track \
 [ctc]: https://celltrackingchallenge.net/datasets/
 
 No model is specified above, so HOCT downloads the default pre-trained model
-(`general_v0`) and caches it; later runs reuse the cache. To use your own
+(`general_v1`) and caches it; later runs reuse the cache. To use the model
+trained for Cell Tracking Challenge data, pass `-m ctc_v0`; to use your own
 checkpoint, pass `-m /path/to/model.pt`. Set `HOCT_CACHE_DIR` to change where
 downloads are cached.
 
@@ -91,7 +92,7 @@ This produces the standard CTC layout (`maskNNN.tif` per timepoint plus
 | Flag | Default | What it does |
 |---|---|---|
 | `-o, --output` | *required* | Output GEFF directory |
-| `-m, --model` | `general_v0` | Checkpoint path or registered model name; the default is downloaded on first use |
+| `-m, --model` | `general_v1` | Checkpoint path or registered model name (for example, `ctc_v0`); the default is downloaded on first use |
 | `-f, --format` | `geff` | `geff` or `ctc` (Cell Tracking Challenge folder) |
 | `-d, --device` | `cuda` | `cuda`, `mps`, or `cpu` (auto-falls back to CPU if needed) |
 | `--tile` | `auto` | `auto`/`on`/`off`. Tiled inference for large data; auto-enables when the candidate graph has more than 2500 edges per timepoint. Tile shape `(t, z, y, x) = (1, 64, 256, 256)`, overlap `(2, 24, 64, 64)`. |
@@ -186,15 +187,22 @@ tiled inference, test-time augmentation, etc.).
 `load_model()` (and the CLI without `-m`) fetch a JIT-compiled checkpoint from
 the project's GitHub releases, verify its SHA256, and cache it under the OS
 cache directory (override with `HOCT_CACHE_DIR`). List the available names with
-`hoct.available_models()`. The registry lives in `src/hoct/_models.py`.
+`hoct.available_models()`. The registered models are:
+
+- `general_v1` — the default model for general datasets;
+- `ctc_v0` — the model trained for Cell Tracking Challenge datasets;
+- `general_v0` — the previous general model, retained for reproducibility.
+
+Select one by passing its name to `load_model()` or to the CLI's `--model` /
+`-m` option. The registry lives in `src/hoct/_models.py`.
 
 ### Publishing new weights (maintainers)
 
-1. Create a GitHub release whose tag matches `_RELEASE_BASE` in
-   `src/hoct/_models.py` (e.g. `weights-v0`) and upload the `.pt` asset.
+1. Create a GitHub release with a new weights tag (e.g. `weights-v2`) and
+   upload the `.pt` asset.
 2. Compute its hash: `shasum -a 256 model.pt`.
-3. Add an entry to `MODELS` in `src/hoct/_models.py` with the asset URL and
-   hash, and bump `DEFAULT_MODEL` if it should become the default.
+3. Add an entry to `MODELS` in `src/hoct/_models.py` with the tagged release
+   asset URL and hash, and bump `DEFAULT_MODEL` if it should become the default.
 
 ## Development
 
