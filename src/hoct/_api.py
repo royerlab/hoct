@@ -321,6 +321,10 @@ def predict(
 
     LOG.info(f"Created graph with {graph.num_nodes()} nodes and {graph.num_edges()} edges")
 
+    if graph.num_edges() == 0:
+        LOG.warning("Candidate graph has no edges; returning detections without links")
+        return graph if return_solution else None
+
     dataset = _create_dataset(graph, tiling_scheme, window_size, test_time_augs)
 
     LOG.info("Running model inference and solving tracking")

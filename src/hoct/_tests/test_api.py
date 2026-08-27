@@ -5,7 +5,9 @@ Tests focus on important behavioral aspects of graph creation API.
 
 import numpy as np
 import pytest
+import tracksdata as td
 
+from hoct import predict, solution_to_tracking_result
 from hoct.features.constants import REGIONPROPS
 from hoct.features.graph import create_graph
 from hoct.tracking import ILPSolverConfig
@@ -98,6 +100,99 @@ class TestCreateGraphFromLabels:
 
         edge_attrs = graph.edge_attr_keys()
         assert "edge_is_gt" not in edge_attrs
+
+    def test_preserves_sparse_and_reused_label_ids(self):
+        labels = np.zeros((2, 16, 16), dtype=np.uint32)
+        labels[0, 1:4, 1:4] = 7
+        labels[0, 8:11, 8:11] = 42
+        labels[1, 2:5, 2:5] = 7
+
+        graph = create_graph(labels, distance_threshold=30.0, n_neighbors=5, delta_t=1)
+        identities = graph.node_attrs(attr_keys=["t", "label_id"]).select("t", "label_id").rows()
+
+        assert sorted(identities) == [(0, 7), (0, 42), (1, 7)]
+        assert "label_id" not in REGIONPROPS
+
+    def test_scale_controls_candidate_geometry_without_changing_raw_coordinates(self):
+        labels = np.zeros((2, 12, 12), dtype=np.uint16)
+        labels[0, 1:3, 1:3] = 7
+        labels[1, 1:3, 5:7] = 42
+
+        unscaled = create_graph(labels, distance_threshold=5.0, n_neighbors=3, delta_t=1)
+        scaled = create_graph(labels, distance_threshold=5.0, n_neighbors=3, delta_t=1, scale=(1.0, 1.0, 2.0))
+
+        assert unscaled.num_edges() == 1
+        assert scaled.num_edges() == 0
+        assert (
+            unscaled.node_attrs(attr_keys=["z", "y", "x"])
+            .select("z", "y", "x")
+            .equals(scaled.node_attrs(attr_keys=["z", "y", "x"]).select("z", "y", "x"))
+        )
+        scaled_positions = scaled.node_attrs(attr_keys=["x", "scaled_x"])
+        np.testing.assert_allclose(scaled_positions["scaled_x"], scaled_positions["x"] * 2.0)
+        assert scaled.metadata["scale"] == (1.0, 1.0, 1.0, 2.0)
+
+    @pytest.mark.parametrize(
+        ("shape", "scale", "expected"),
+        [
+            ((2, 8, 8), (1.0, 1.0, 1.0, 1.0), "3 elements"),
+            ((2, 3, 8, 8), (1.0, 1.0, 1.0), "4 elements"),
+        ],
+    )
+    def test_scale_length_is_validated_for_original_dimensions(self, shape, scale, expected):
+        labels = np.zeros(shape, dtype=np.uint16)
+
+        with pytest.raises(ValueError, match=expected):
+            create_graph(labels, distance_threshold=5.0, n_neighbors=3, delta_t=1, scale=scale)
+
+    def test_out_graph_is_updated_in_place_with_interop_schema(self):
+        labels = np.zeros((2, 8, 8), dtype=np.uint16)
+        labels[0, 1:3, 1:3] = 7
+        labels[1, 2:4, 2:4] = 42
+        out_graph = td.graph.InMemoryGraph()
+
+        result = create_graph(
+            labels,
+            out_graph=out_graph,
+            distance_threshold=5.0,
+            n_neighbors=3,
+            delta_t=1,
+        )
+
+        assert result is out_graph
+        assert {"label_id", "scaled_z", "scaled_y", "scaled_x"} <= set(result.node_attr_keys())
+
+    @pytest.mark.parametrize("shape", [(2, 8, 8), (2, 3, 8, 8)])
+    def test_empty_graph_has_interop_and_scaled_coordinate_schema(self, shape):
+        labels = np.zeros(shape, dtype=np.uint16)
+
+        graph = create_graph(labels, distance_threshold=5.0, n_neighbors=3, delta_t=1)
+
+        assert graph.num_nodes() == 0
+        assert graph.num_edges() == 0
+        assert {"label_id", "scaled_z", "scaled_y", "scaled_x"} <= set(graph.node_attr_keys())
+
+    def test_predict_returns_an_exact_empty_result_without_running_the_model(self):
+        labels = np.zeros((2, 8, 8), dtype=np.uint16)
+
+        graph = predict(None, labels=labels, distance_threshold=5.0, n_neighbors=3, max_delta_t=1)
+        result = solution_to_tracking_result(graph)
+
+        assert result.detections.shape == (0, 2)
+        assert result.links.shape == (0, 4)
+        assert result.similarities.shape == (0,)
+
+    def test_predict_returns_isolated_detections_when_no_candidate_link_exists(self):
+        labels = np.zeros((2, 16, 16), dtype=np.uint16)
+        labels[0, 1:3, 1:3] = 7
+        labels[1, 12:14, 12:14] = 42
+
+        graph = predict(None, labels=labels, distance_threshold=1.0, n_neighbors=3, max_delta_t=1)
+        result = solution_to_tracking_result(graph)
+
+        np.testing.assert_array_equal(result.detections, [[0, 7], [1, 42]])
+        assert result.links.shape == (0, 4)
+        assert result.similarities.shape == (0,)
 
 
 class TestSolverConfig:

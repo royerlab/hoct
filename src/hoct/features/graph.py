@@ -12,6 +12,15 @@ from tracksdata.utils._multiprocessing import multiprocessing_apply
 from hoct.features.constants import EDGE_GT_KEY, REGIONPROPS
 from hoct.features.features import add_border_dist, add_delta_t, add_is_div, normalize_image
 
+LABEL_ID_KEY = "label_id"
+_SPATIAL_KEYS = ("z", "y", "x")
+_SCALED_SPATIAL_KEYS = tuple(f"scaled_{key}" for key in _SPATIAL_KEYS)
+
+
+def label_id(region: Any) -> int:
+    """Return the original integer label for a segmented region."""
+    return int(region.label)
+
 
 def convert_to_3d(graph: td.graph.RustWorkXGraph) -> None:
     """
@@ -139,11 +148,21 @@ def create_graph(
             normalize_kwargs = {}
         images = images.map_blocks(normalize_image, **normalize_kwargs)
 
+    original_ndim = labels.ndim
+    if original_ndim not in (3, 4):
+        raise ValueError(f"Labels must be 3D (T, Y, X) or 4D (T, Z, Y, X), got shape: {labels.shape}")
+
     if scale is None:
-        scale = (1.0,) * labels.ndim
+        scale = (1.0,) * original_ndim
+    elif len(scale) != original_ndim:
+        expected_axes = "t, y, x" if original_ndim == 3 else "t, z, y, x"
+        raise ValueError(
+            f"Scale must have {original_ndim} elements ({expected_axes}) for labels with shape {labels.shape}, "
+            f"got {len(scale)}"
+        )
 
     # Handle 2D vs 3D data
-    if labels.ndim == 3:
+    if original_ndim == 3:
         labels = da.expand_dims(labels, axis=1)
         was_2d = True
         # 2D+t case
@@ -152,14 +171,9 @@ def create_graph(
 
         scale = (scale[0], 1.0, *scale[1:])
 
-    elif labels.ndim == 4:
+    else:
         # 3D+t case
         was_2d = False
-
-    else:
-        raise ValueError(f"Labels must be 3D (T, Y, X) or 4D (T, Z, Y, X), got shape: {labels.shape}")
-
-    assert len(scale) == 4, f"Scale must have 4 elements (t, z, y, x), got {len(scale)}"
 
     # Add nodes from regionprops
     # Only request intensity properties if images are provided
@@ -173,13 +187,31 @@ def create_graph(
         extra_properties.remove("border_dist")
 
     td.nodes.RegionPropsNodes(
-        extra_properties=extra_properties,
+        extra_properties=[*extra_properties, label_id],
     ).add_nodes(graph, labels=labels, intensity_image=images)
 
-    # Add scaled position attributes
-    cols = [td.DEFAULT_ATTR_KEYS.T, "z", "y", "x"]
-    node_attrs = graph.node_attrs(attr_keys=[td.DEFAULT_ATTR_KEYS.NODE_ID, *cols])
-    node_attrs = node_attrs.with_columns([(pl.col(c) * scale[i]).alias(f"scaled_{c}") for i, c in enumerate(cols)])
+    # RegionPropsNodes cannot infer a schema when every frame is empty.
+    empty_graph_schema = {
+        td.DEFAULT_ATTR_KEYS.T: (pl.Int32, 0),
+        LABEL_ID_KEY: (pl.Int64, 0),
+        **dict.fromkeys(_SPATIAL_KEYS, (pl.Float64, 0.0)),
+    }
+    for key, (dtype, default) in empty_graph_schema.items():
+        if key not in graph.node_attr_keys():
+            graph.add_node_attr_key(key, dtype, default)
+
+    # Persist scaled spatial positions for candidate generation without altering
+    # the raw coordinates consumed by the model.
+    node_ids = list(graph.node_ids())
+    node_attrs = graph.node_attrs(attr_keys=[td.DEFAULT_ATTR_KEYS.NODE_ID, *_SPATIAL_KEYS])
+    scaled_attrs = {
+        scaled_key: (node_attrs[spatial_key] * scale[index + 1]).to_numpy()
+        for index, (spatial_key, scaled_key) in enumerate(zip(_SPATIAL_KEYS, _SCALED_SPATIAL_KEYS, strict=True))
+    }
+    for scaled_key in _SCALED_SPATIAL_KEYS:
+        if scaled_key not in graph.node_attr_keys():
+            graph.add_node_attr_key(scaled_key, pl.Float64, 0.0)
+    graph.update_node_attrs(attrs=scaled_attrs, node_ids=node_ids)
 
     if images is None:
         for prop in REGIONPROPS:
@@ -193,6 +225,7 @@ def create_graph(
             n_neighbors=n_neighbors,
             delta_t=delta_t,
             neighbors_per_frame=True,
+            attr_keys=_SCALED_SPATIAL_KEYS,
         ).add_edges(graph)
 
         # Add required features

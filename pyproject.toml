@@ -41,7 +41,6 @@ dependencies = [
     "pyyaml>=6.0.3",
     "typer>=0.21.1",
     "rich>=14.3.1",
-    "gurobipy>12.0.1,<13.0.0",
     "matplotlib>=3.10.8",
 ]
 
@@ -50,6 +49,9 @@ Homepage = "https://github.com/royerlab/hoct"
 Repository = "https://github.com/royerlab/hoct"
 
 [project.optional-dependencies]
+gurobi = [
+    "gurobipy>12.0.1,<13.0.0",
+]
 correction = [
     "scikit-learn>=1.6.0",
 ]

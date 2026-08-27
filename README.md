@@ -138,6 +138,12 @@ pip install "hoct[bioio]"
 ```
 
 The `bioio` extra is needed for the `track` CLI (reading image/label files).
+HOCT uses the open-source SCIP backend by default. To make Gurobi available as
+an alternative solver, install the optional extra and configure its license:
+
+```bash
+pip install "hoct[gurobi]"
+```
 
 ## Installation (for developers)
 
@@ -178,6 +184,25 @@ images = np.load("images.npy")
 solution_graph = predict(model, labels=labels, images=images)
 solution_graph.to_geff("tracks.geff")
 ```
+
+For Fiji, Appose, or other array-based integrations, convert the solution to a
+label-stable result. Endpoints are identified by the original segmentation
+label together with its frame, never by HOCT's internal graph node ID:
+
+```python
+from hoct import solution_to_tracking_result
+
+result = solution_to_tracking_result(solution_graph)
+result.detections  # int64 (N, 2): [t, label_id]
+result.links  # int64 (M, 4): [source_t, source_label, target_t, target_label]
+result.similarities  # float64 (M,): model confidence for each link
+link_table = result.link_table()  # float64 (M, 5) convenience representation
+```
+
+The arrays owned by `result` are defensive, read-only copies and remain valid
+independently of the graph. Label values may be sparse and may be reused in
+different frames. If no candidate link exists, prediction returns all input
+detections as isolated objects with exact empty link and similarity arrays.
 
 See `hoct.predict` for the full signature (custom solver config,
 tiled inference, test-time augmentation, etc.).

@@ -2,6 +2,14 @@
 
 from hoct.__about__ import __version__
 from hoct._api import predict
+from hoct._interop import TrackingResult, solution_to_tracking_result
 from hoct._models import available_models, load_model
 
-__all__ = ["__version__", "available_models", "load_model", "predict"]
+__all__ = [
+    "TrackingResult",
+    "__version__",
+    "available_models",
+    "load_model",
+    "predict",
+    "solution_to_tracking_result",
+]
