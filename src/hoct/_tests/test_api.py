@@ -4,8 +4,10 @@ Tests focus on important behavioral aspects of graph creation API.
 """
 
 import numpy as np
+import polars as pl
 import pytest
 
+import hoct._api as api
 from hoct.features.constants import REGIONPROPS
 from hoct.features.graph import create_graph
 from hoct.tracking import ILPSolverConfig
@@ -98,6 +100,50 @@ class TestCreateGraphFromLabels:
 
         edge_attrs = graph.edge_attr_keys()
         assert "edge_is_gt" not in edge_attrs
+
+
+class TestCreateDataset:
+    """Tests for dataset-level data transforms."""
+
+    def test_scale_is_applied_deterministically(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        class DummyDataset:
+            def __init__(self, **kwargs: object) -> None:
+                self.df_transforms = kwargs["df_transforms"]
+
+        monkeypatch.setattr(api, "FrameDataset", DummyDataset)
+        dataset = api._create_dataset(graph=object(), scale=(1.0, 2.0, 3.0, 4.0))
+
+        assert len(dataset.df_transforms) == 1
+        data = pl.DataFrame(
+            {
+                "z": [0.0, 1.0, 2.0],
+                "y": [0.0, 1.0, 2.0],
+                "x": [0.0, 1.0, 2.0],
+                "area": [1.0, 2.0, 3.0],
+            }
+        )
+        transformed = dataset.df_transforms[0](data)
+
+        assert transformed["z"].to_list() == pytest.approx([0.0, 2.0, 4.0])
+        assert transformed["y"].to_list() == pytest.approx([0.0, 3.0, 6.0])
+        assert transformed["x"].to_list() == pytest.approx([0.0, 4.0, 8.0])
+        assert transformed["area"].to_list() == pytest.approx([24.0, 48.0, 72.0])
+        assert transformed.equals(dataset.df_transforms[0](data))
+
+    def test_scale_adds_singleton_z_for_2d_data(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        class DummyDataset:
+            def __init__(self, **kwargs: object) -> None:
+                self.df_transforms = kwargs["df_transforms"]
+
+        monkeypatch.setattr(api, "FrameDataset", DummyDataset)
+        dataset = api._create_dataset(graph=object(), scale=(1.0, 2.0, 3.0))
+        data = pl.DataFrame({"y": [0.0, 1.0], "x": [0.0, 1.0], "area": [1.0, 2.0]})
+
+        transformed = dataset.df_transforms[0](data)
+
+        assert transformed["y"].to_list() == pytest.approx([0.0, 2.0])
+        assert transformed["x"].to_list() == pytest.approx([0.0, 3.0])
+        assert transformed["area"].to_list() == pytest.approx([6.0, 12.0])
 
 
 class TestSolverConfig:
