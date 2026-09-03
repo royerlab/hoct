@@ -96,6 +96,40 @@ class TestAffine:
         assert not result["z"].equals(df["z"])
 
     @staticmethod
+    def test_per_axis_scaling() -> None:
+        df = pl.DataFrame(
+            {
+                "z": [0.0, 1.0, 2.0],
+                "y": [0.0, 1.0, 2.0],
+                "x": [0.0, 1.0, 2.0],
+                "area": [1.0, 2.0, 3.0],
+            }
+        )
+        transform = Affine(
+            degree_range=(0, 0),
+            scale_range=[(2.0, 2.0), (3.0, 3.0), (4.0, 4.0)],
+            shear_range=None,
+        )
+
+        result = transform(df)
+
+        assert result["z"].to_list() == pytest.approx([0.0, 2.0, 4.0])
+        assert result["y"].to_list() == pytest.approx([0.0, 3.0, 6.0])
+        assert result["x"].to_list() == pytest.approx([0.0, 4.0, 8.0])
+        assert result["area"].to_list() == pytest.approx([24.0, 48.0, 72.0])
+
+    @staticmethod
+    def test_per_axis_scaling_is_deterministic() -> None:
+        df = pl.DataFrame({"y": [0.0, 1.0], "x": [0.0, 1.0], "area": [1.0, 2.0]})
+        transform = Affine(
+            degree_range=(0, 0),
+            scale_range=[(2.0, 2.0), (3.0, 3.0)],
+            shear_range=None,
+        )
+
+        assert transform(df).equals(transform(df))
+
+    @staticmethod
     def test_affine_transformations_correctness() -> None:
         """Test mathematical correctness of affine transformations using static method."""
 
