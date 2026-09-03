@@ -193,6 +193,7 @@ def create_graph(
             n_neighbors=n_neighbors,
             delta_t=delta_t,
             neighbors_per_frame=True,
+            attr_keys=[f"scaled_{c}" for c in cols],
         ).add_edges(graph)
 
         # Add required features
