@@ -139,6 +139,7 @@ def _create_dataset(
     tiling_scheme: TilingScheme | None = None,
     window_size: int = 5,
     test_time_augs: int = 0,
+    scale: tuple[float, ...] | None = None,
 ) -> FrameDataset | TiledRoiDataset | GraphConcatDataset:
     """
     Create a dataset from a graph.
@@ -153,23 +154,47 @@ def _create_dataset(
         The window size to use for the dataset.
     test_time_augs : int, default=0
         The number of test time augmentations to use for the dataset.
+    scale : tuple[float, ...] | None, default=None
+        Physical spacing (t, [z,] y, x) to apply to dataset spatial features.
+        The scaling is deterministic; ``t`` is used for graph construction and
+        is not applied to spatial dataframe features.
 
     Returns
     -------
     FrameDataset | TiledRoiDataset | GraphConcatDataset
         The created dataset.
     """
-    if test_time_augs > 0:
-        df_transforms = [
-            Flip(columns=["z", "y", "x"], p=0.5),
+    df_transforms = []
+    if scale is not None:
+        spatial_scale: tuple[float, ...] = scale[1:]
+        if len(spatial_scale) == 2:
+            # 2D+t inputs have a singleton z axis in the graph.
+            spatial_scale = (1.0, *spatial_scale)
+        elif len(spatial_scale) != 3:
+            raise ValueError(f"Scale must have 3 or 4 elements (t, [z,] y, x), got {len(scale)}")
+
+        # Scaling is a data transform rather than just an edge-construction
+        # parameter.  Use fixed ranges so every dataset item receives the same
+        # physical scaling before any optional random test-time augmentation.
+        df_transforms.append(
             Affine(
-                degree_range=(-180, 180),
-                scale_range=(1, 1),
+                degree_range=(0, 0),
+                scale_range=[(value, value) for value in spatial_scale],
                 shear_range=((0, 0), (0, 0)),
-            ),
-        ]
-    else:
-        df_transforms = []
+            )
+        )
+
+    if test_time_augs > 0:
+        df_transforms.extend(
+            [
+                Flip(columns=["z", "y", "x"], p=0.5),
+                Affine(
+                    degree_range=(-180, 180),
+                    scale_range=[(1, 1), (1, 1), (1, 1)],
+                    shear_range=((0, 0), (0, 0)),
+                ),
+            ]
+        )
 
     if tiling_scheme is not None:
         LOG.info("Creating tiled ROI dataset")
@@ -240,6 +265,7 @@ def predict(
         Maximum temporal gap for edges.
     scale : tuple[float, ...] | None
         Physical spacing (t, [z,] y, x). If None, uses isotropic spacing.
+        If provided `distance_threshold` is in physical units and features are scaled to physical units.
     window_size : int
         Temporal window size for the frame dataset. Only used if tiling_scheme is None.
     tiling_scheme : TilingScheme | None
@@ -321,7 +347,7 @@ def predict(
 
     LOG.info(f"Created graph with {graph.num_nodes()} nodes and {graph.num_edges()} edges")
 
-    dataset = _create_dataset(graph, tiling_scheme, window_size, test_time_augs)
+    dataset = _create_dataset(graph, tiling_scheme, window_size, test_time_augs, scale)
 
     LOG.info("Running model inference and solving tracking")
     solution_graph = model_predict(model, dataset, solver_config=solver_config, return_solution=return_solution)

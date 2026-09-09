@@ -186,6 +186,14 @@ def create_graph(
             if "intensity" in prop:
                 graph.add_node_attr_key(prop, pl.Float32, 0.0)
 
+    for column in [f"scaled_{c}" for c in cols]:
+        graph.add_node_attr_key(column, pl.Float32, 0.0)
+
+    graph.update_node_attrs(
+        attrs={f"scaled_{c}": node_attrs[f"scaled_{c}"].to_list() for c in cols},
+        node_ids=node_attrs[td.DEFAULT_ATTR_KEYS.NODE_ID].to_list(),
+    )
+
     # Add candidate edges
     with td.options.Options(n_workers=1):
         td.edges.DistanceEdges(
@@ -193,6 +201,7 @@ def create_graph(
             n_neighbors=n_neighbors,
             delta_t=delta_t,
             neighbors_per_frame=True,
+            attr_keys=[f"scaled_{c}" for c in cols],
         ).add_edges(graph)
 
         # Add required features
