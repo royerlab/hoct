@@ -101,6 +101,25 @@ class TestCreateGraphFromLabels:
         edge_attrs = graph.edge_attr_keys()
         assert "edge_is_gt" not in edge_attrs
 
+    def test_scaled_position_attributes_are_registered(self, synthetic_2d_labels):
+        """Test that scaled positions are available to candidate edge creation."""
+        graph = create_graph(
+            labels=synthetic_2d_labels,
+            distance_threshold=300.0,
+            n_neighbors=5,
+            delta_t=3,
+            scale=(2.0, 3.0, 4.0),
+        )
+
+        node_attrs = graph.node_attr_keys()
+        assert {"scaled_t", "scaled_z", "scaled_y", "scaled_x"}.issubset(node_attrs)
+
+        attrs = graph.node_attrs(attr_keys=["t", "z", "y", "x", "scaled_t", "scaled_z", "scaled_y", "scaled_x"])
+        assert attrs["scaled_t"].to_list() == pytest.approx([2.0 * value for value in attrs["t"].to_list()])
+        assert attrs["scaled_z"].to_list() == pytest.approx([0.0] * len(attrs))
+        assert attrs["scaled_y"].to_list() == pytest.approx([3.0 * value for value in attrs["y"].to_list()])
+        assert attrs["scaled_x"].to_list() == pytest.approx([4.0 * value for value in attrs["x"].to_list()])
+
 
 class TestCreateDataset:
     """Tests for dataset-level data transforms."""
