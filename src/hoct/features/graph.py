@@ -190,10 +190,7 @@ def create_graph(
         graph.add_node_attr_key(column, pl.Float32, 0.0)
 
     graph.update_node_attrs(
-        attrs={
-            f"scaled_{c}": node_attrs[f"scaled_{c}"].to_list()
-            for c in cols
-        },
+        attrs={f"scaled_{c}": node_attrs[f"scaled_{c}"].to_list() for c in cols},
         node_ids=node_attrs[td.DEFAULT_ATTR_KEYS.NODE_ID].to_list(),
     )
 
