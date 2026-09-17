@@ -76,11 +76,24 @@ class Affine(BaseTransform):
     def __init__(
         self,
         degree_range: tuple[float, float] | None,
-        scale_range: tuple[float, float] | None,
+        scale_range: Sequence[tuple[float, float]] | tuple[float, float] | None,
         shear_range: tuple[tuple[float, float], tuple[float, float]] | None,
     ):
         self._degree_range = degree_range or (0, 0)
-        self._scale_range = scale_range or (1, 1)
+        self._scale_range: tuple[tuple[float, float], ...]
+        if scale_range is None:
+            self._scale_range = ((1.0, 1.0),) * 3
+        elif len(scale_range) == 2 and all(np.isscalar(value) for value in scale_range):
+            # Keep accepting the old single range as a uniform range for every
+            # spatial axis.  A sequence of ranges can then specify each axis
+            # independently (z, y, x).
+            self._scale_range = (tuple(float(value) for value in scale_range),) * 3
+        else:
+            self._scale_range = tuple(tuple(float(value) for value in axis_range) for axis_range in scale_range)
+        if len(self._scale_range) not in (2, 3):
+            raise ValueError(f"Expected two or three scale ranges, got {len(self._scale_range)}")
+        if any(len(axis_range) != 2 for axis_range in self._scale_range):
+            raise ValueError("Each scale range must contain exactly two values")
         self._shear_range = shear_range or ((0, 0), (0, 0))
 
     @staticmethod
@@ -138,9 +151,6 @@ class Affine(BaseTransform):
     def __call__(self, df: pl.DataFrame) -> pl.DataFrame:
         degrees = _uniform(1, self._degree_range).item()
         rad = np.deg2rad(degrees)
-        scales = _uniform(3, self._scale_range)
-        shear_y = _uniform(1, self._shear_range[0]).item()
-        shear_x = _uniform(1, self._shear_range[1]).item()
 
         if "z" in df.columns:
             sp_columns = ["z", "y", "x"]
@@ -149,6 +159,19 @@ class Affine(BaseTransform):
             sp_columns = ["y", "x"]
             ndim = 2
 
+        if len(self._scale_range) == 3:
+            # The 3D affine matrix is sliced to its trailing dimensions for
+            # 2D data, so sample all three ranges and retain the corresponding
+            # trailing scales below.
+            sampled_scales = [_uniform(1, axis_range).item() for axis_range in self._scale_range]
+            scales = torch.tensor(sampled_scales)
+        elif len(self._scale_range) == ndim:
+            spatial_scales = [_uniform(1, axis_range).item() for axis_range in self._scale_range]
+            scales = torch.tensor([1.0, *spatial_scales])
+        else:
+            raise ValueError(f"Expected {ndim} or 3 scale ranges, got {len(self._scale_range)}")
+        shear_y = _uniform(1, self._shear_range[0]).item()
+        shear_x = _uniform(1, self._shear_range[1]).item()
         affine = self._rotation_matrix(rad) @ np.diag(scales) @ self._shear_matrix(shear_y, shear_x)
         # original affine is 3D
         affine = affine[-ndim:, -ndim:]
