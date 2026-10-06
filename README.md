@@ -192,8 +192,13 @@ uv run --extra demo python examples/incremental_fine_tuning.py /data/Fluo-C2DL-H
 ```
 
 The demo loads a local CTC sequence lazily with Dask and provides a Napari
-viewer for tracks and interactive link correction. See the [demo guide](examples/README.md) for setup, keyboard controls,
-outputs, and a UI-independent session API you can adapt to your own viewer.
+viewer for tracks and interactive link correction.
+
+Read the [incremental correction and fine-tuning documentation](examples/README.md)
+for installation, CTC data preparation, Napari keyboard controls, GEFF outputs,
+and examples of adapting the correction session to your own interface and UI
+loop. The guide also explains how the demo relates to the paper's correction
+protocol.
 
 ## Pre-trained models
 
