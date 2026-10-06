@@ -50,6 +50,11 @@ Homepage = "https://github.com/royerlab/hoct"
 Repository = "https://github.com/royerlab/hoct"
 
 [project.optional-dependencies]
+demo = [
+    "click>=8.1",
+    "napari[pyqt6]>=0.6",
+    "scikit-learn>=1.6.0",
+]
 correction = [
     "scikit-learn>=1.6.0",
 ]

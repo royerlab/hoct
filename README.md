@@ -182,6 +182,19 @@ solution_graph.to_geff("tracks.geff")
 See `hoct.predict` for the full signature (custom solver config,
 tiled inference, test-time augmentation, etc.).
 
+### Incremental correction demo
+
+Review candidate links, fine-tune a linear head on frozen HOCT embeddings,
+and refresh tracking after each annotation batch:
+
+```bash
+uv run --extra demo python examples/incremental_fine_tuning.py /data/Fluo-C2DL-Huh7
+```
+
+The demo loads a local CTC sequence lazily with Dask and provides a Napari
+viewer for tracks and interactive link correction. See the [demo guide](examples/README.md) for setup, keyboard controls,
+outputs, and a UI-independent session API you can adapt to your own viewer.
+
 ## Pre-trained models
 
 `load_model()` (and the CLI without `-m`) fetch a JIT-compiled checkpoint from
