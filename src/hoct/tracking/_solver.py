@@ -10,49 +10,34 @@ from hoct.tracking._tracklet_solver import TrackletSolver
 class ILPSolverConfig(BaseModel):
     """Configuration for the ILP tracking solver.
 
-    Parameters
+    Use ``ILPSolverConfig.default()`` for the package's tracking defaults.
+    Direct construction requires all weight fields and ``tracklet_solver``.
+
+    Attributes
     ----------
-    appearance_weight : float, default=1.0
-        Weight for appearance edges (nodes appearing in the first frame or orphans).
-        Higher values make the solver prefer nodes to appear rather than be linked.
-    disappearance_weight : float, default=1.0
-        Weight for disappearance edges (nodes disappearing in the last frame or becoming orphans).
-        Higher values make the solver prefer nodes to disappear rather than continue tracking.
-    division_weight : float, default=1.0
-        Weight for cell division edges. Set to a very high value (e.g., 1e6) to effectively
-        disable divisions in the tracking solution.
-    node_weight : float, default=1.0
-        Weight for node selection in the tracking graph.
-        Higher values encourage more nodes to be selected in the solution.
-    delta_t_weight : float, default=0.0
-        Penalty weight for edges spanning multiple time frames.
-        Positive values discourage long temporal gaps between linked nodes.
-        The penalty grows exponentially: exp(-delta_t_weight * (delta_t - 1))
-    edge_bias : float, default=0.0
-        Constant bias added to all edge weights before solving.
-        Positive values favor edge creation, negative values discourage it.
-    timeout : float, default=600.0
-        Maximum time in seconds for the ILP solver to run.
-        The solver will return the best solution found within this time limit.
-    tracklet_solver : bool, default=False
-        Whether to use a two-pass tracklet solver.
-        First pass: solve for tracklets (short tracks)
-        Second pass: link tracklets together
-        This can improve performance on large graphs but may affect solution quality.
+    appearance_weight : float | tracksdata.attrs.Attr
+        Cost weight for appearances, modulated by predicted orphan probability.
+    disappearance_weight : float | tracksdata.attrs.Attr
+        Cost weight for cells disappearing before the last frame.
+    division_weight : float | tracksdata.attrs.Attr
+        Cost weight for divisions. A large positive value discourages divisions.
+    node_weight : float | tracksdata.attrs.Attr
+        Node-selection cost. Negative values encourage including detections.
+    delta_t_weight : float | tracksdata.attrs.Attr
+        Decay applied to link weights as the temporal gap grows.
+    edge_bias : float | tracksdata.attrs.Attr
+        Added to negative similarity when computing edge cost. Positive values
+        increase link costs.
+    timeout : float
+        Maximum solver time in seconds. Direct-construction default is 600.
+    tracklet_solver : bool
+        Enable two-pass solving: form tracklets, then link those tracklets.
 
     Examples
     --------
-    >>> # Default configuration
-    >>> config = ILPSolverConfig()
-
-    >>> # Disable divisions by setting very high weight
-    >>> config = ILPSolverConfig(division_weight=1e6)
-
-    >>> # Penalize temporal gaps
-    >>> config = ILPSolverConfig(delta_t_weight=0.5)
-
-    >>> # Two-pass tracklet solving with custom weights
-    >>> config = ILPSolverConfig(appearance_weight=2.0, disappearance_weight=2.0, tracklet_solver=True)
+    >>> config = ILPSolverConfig.default()
+    >>> # Keep the remaining defaults and discourage divisions.
+    >>> config = config.model_copy(update={"division_weight": 1e6})
     """
 
     appearance_weight: float | td.attrs.Attr = Field(description="Weight for appearance edges")

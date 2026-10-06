@@ -33,7 +33,8 @@ dependencies = [
     "h5py>=3.9.0",
     "toolz>=0.11.0",
     "dask[array]>=2022.3.0",
-    "polars>=1.0.0",
+    # tracksdata's array unpacking uses the callable arr.to_struct API removed in Polars 2.
+    "polars>=1.0.0,<2",
     "torch>=2.0.0",
     "spatial-graph>=0.0.5",
     "tracksdata>=0.1.0rc4",
@@ -50,6 +51,11 @@ Homepage = "https://github.com/royerlab/hoct"
 Repository = "https://github.com/royerlab/hoct"
 
 [project.optional-dependencies]
+demo = [
+    "click>=8.1",
+    "napari[pyqt6]>=0.6",
+    "scikit-learn>=1.6.0",
+]
 correction = [
     "scikit-learn>=1.6.0",
 ]
@@ -69,6 +75,13 @@ dev = [
 
 [project.scripts]
 hoct = "hoct.cli:app"
+
+[dependency-groups]
+docs = [
+    "mkdocs>=1.6,<2",
+    "mkdocs-material>=9.6,<10",
+    "mkdocstrings[python]>=0.29,<1",
+]
 
 [tool.hatch.version]
 source = "vcs"

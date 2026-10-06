@@ -3,6 +3,13 @@
 Inference and tracking for the Higher-Order Cell Tracking Transformer (HOCT)
 model with JIT-compiled models.
 
+## Documentation
+
+Read the [documentation site](https://royerlab.github.io/hoct/) for installation,
+tracking workflows, incremental correction, and the Python API reference.
+The [documentation source](docs/index.md) and
+[incremental correction guide](examples/README.md) are also available in this repository.
+
 ---
 
 ## Quick start (for biologists)
@@ -182,6 +189,24 @@ solution_graph.to_geff("tracks.geff")
 See `hoct.predict` for the full signature (custom solver config,
 tiled inference, test-time augmentation, etc.).
 
+### Incremental correction demo
+
+Review candidate links, fine-tune a linear head on frozen HOCT embeddings,
+and refresh tracking after each annotation batch:
+
+```bash
+uv run --extra demo python examples/incremental_fine_tuning.py /data/Fluo-C2DL-Huh7
+```
+
+The demo loads a local CTC sequence lazily with Dask and provides a Napari
+viewer for tracks and interactive link correction.
+
+Read the [incremental correction and fine-tuning documentation](examples/README.md)
+for installation, CTC data preparation, Napari keyboard controls, GEFF outputs,
+and examples of adapting the correction session to your own interface and UI
+loop. The guide also explains how the demo relates to the paper's correction
+protocol.
+
 ## Pre-trained models
 
 `load_model()` (and the CLI without `-m`) fetch a JIT-compiled checkpoint from
@@ -215,4 +240,8 @@ ruff check .
 
 # Format code
 ruff format .
+
+# Preview or build the documentation (no tracking dependencies needed)
+uv run --only-group docs mkdocs serve
+uv run --only-group docs mkdocs build --strict
 ```

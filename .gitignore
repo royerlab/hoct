@@ -59,3 +59,7 @@ src/hoct/__about__.py
 
 # local test data (CTC datasets + generated GEFF fixtures)
 .test-data/
+
+# Documentation build and isolated preview environment
+site/
+.venv-docs/

@@ -1,0 +1,55 @@
+site_name: HOCT
+site_description: Cell tracking and incremental correction with the Higher-Order Cell Tracking Transformer.
+site_url: https://royerlab.github.io/hoct/
+repo_name: royerlab/hoct
+repo_url: https://github.com/royerlab/hoct
+edit_uri: edit/main/docs/
+strict: true
+watch:
+  - src/hoct
+  - examples/README.md
+
+theme:
+  name: material
+  palette:
+    primary: teal
+  features:
+    - navigation.sections
+    - content.code.copy
+
+nav:
+  - Home: index.md
+  - Installation: installation.md
+  - Tracking: tracking.md
+  - Incremental correction: correction.md
+  - API reference: api.md
+  - Development: development.md
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            docstring_style: numpy
+            show_root_heading: true
+            show_source: false
+            separate_signature: true
+            heading_level: 3
+            members: false
+
+markdown_extensions:
+  - admonition
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - pymdownx.snippets:
+      check_paths: true
+
+validation:
+  nav:
+    omitted_files: warn
+  links:
+    not_found: warn
+    unrecognized_links: warn
+    anchors: warn
