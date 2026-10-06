@@ -44,7 +44,8 @@ masks are markers rather than complete segmentations, so this is a convenient
 input example rather than a faithful segmentation benchmark. Supply your own
 complete instance masks with `--labels-dir /data/segmentation`. Every loaded
 image frame needs a matching mask frame. Sparse CTC SEG masks are unsuitable.
-Images and masks are lazy Dask arrays with one frame per chunk. The loader reads
+Images and masks are loaded directly with `dask.array.image.imread`, with one
+frame per chunk. It reads
 one sample frame per stack to infer shape and dtype via
 `dask.array.image.imread`; graph construction and Napari request the remaining
 pixels as needed.
@@ -119,7 +120,9 @@ handlers update viewer layers. Do not mutate the session concurrently.
 `td.functional.to_napari_format(session.solution, shape=images.shape)` converts
 tracks to the displayed image dimensionality, including 2D data.
 
-Adapt `load_ctc` for another dataset, or start with a full candidate GEFF:
+Change the two `imread` globs in `main` for another dataset. Use zero-padded
+filenames in matching frame order, with nonnegative integer instance masks.
+Alternatively, start with a full candidate GEFF:
 
 ```python
 import tracksdata as td

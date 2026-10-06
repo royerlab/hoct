@@ -7,7 +7,6 @@ import dask.array as da
 import numpy as np
 import polars as pl
 import pytest
-import tifffile
 import tracksdata as td
 
 from hoct._tests.test_correction import FakeEdgeModel
@@ -94,33 +93,6 @@ def test_session_fit_predict_export_and_accumulate(graph, tmp_path):
     saved, _ = td.graph.InMemoryGraph.from_geff(str(tmp_path / "result" / "candidates.geff"))
     assert saved.edge_attrs(attr_keys=[demo.LABEL_MASK])[demo.LABEL_MASK].sum() > 1
     assert (tmp_path / "result" / "tracks.geff").exists()
-
-
-def test_ctc_loader_matches_numeric_frames_and_rejects_missing_masks(tmp_path, monkeypatch):
-    images = tmp_path / "01"
-    masks = tmp_path / "01_GT" / "TRA"
-    images.mkdir()
-    masks.mkdir(parents=True)
-    for index in range(5, 10):
-        tifffile.imwrite(images / f"t{index:03}.tif", np.full((16, 16), index, dtype=np.uint16))
-        tifffile.imwrite(masks / f"man_track{index:03}.tif", np.ones((16, 16), dtype=np.uint16))
-    reads = []
-    original_read = tifffile.imread
-
-    def read(path):
-        reads.append(path)
-        return original_read(path)
-
-    monkeypatch.setattr(tifffile, "imread", read)
-    stack, labels = demo.load_ctc(tmp_path, n_frames=5)
-    assert isinstance(stack, da.Array) and isinstance(labels, da.Array)
-    assert len(reads) == 2  # Dask reads only one sample frame per stack.
-    assert stack.chunks[0] == (1,) * 5
-    assert stack.shape == labels.shape == (5, 16, 16)
-    assert stack[:, 0, 0].compute().tolist() == list(range(5, 10))
-    (masks / "man_track007.tif").unlink()
-    with pytest.raises(ValueError, match="Missing segmentation"):
-        demo.load_ctc(tmp_path, n_frames=5)
 
 
 @pytest.mark.parametrize("volume", [False, True])

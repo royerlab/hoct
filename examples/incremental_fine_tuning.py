@@ -16,7 +16,7 @@ Press y/n to label, s to skip, t to switch endpoints, b to submit a partial
 batch, or q to submit and finish correction. Use Napari's time/z sliders to
 inspect cells. Close the viewer to export the candidate graph and tracks.
 
-Adaptation points: replace ``load_ctc`` for your data or ``NapariCorrectionUI``
+Adaptation points: change the image globs in ``main`` for your data or ``NapariCorrectionUI``
 for your viewer and annotation callbacks. ``CorrectionSession`` owns the graph,
 model and annotations independently of the UI. See examples/README.md for an
 asynchronous UI-loop sketch and details of the paper's correction protocol.
@@ -24,14 +24,12 @@ asynchronous UI-loop sketch and details of the paper's correction protocol.
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 import click
 import dask.array as da
 import numpy as np
 import polars as pl
-import tifffile
 import torch
 import tracksdata as td
 from dask.array.image import imread
@@ -49,65 +47,6 @@ NODE_ID = td.DEFAULT_ATTR_KEYS.NODE_ID
 SOLUTION = td.DEFAULT_ATTR_KEYS.SOLUTION
 LABEL_MASK = "is_labeled"
 LABEL = "is_correct"
-
-
-def load_ctc(
-    root: Path, sequence: str = "01", labels_dir: Path | None = None, n_frames: int = 10
-) -> tuple[da.Array, da.Array]:
-    """Load the first n_frames of a local CTC sequence as (T, [Z,] Y, X).
-
-    TIFF names must end in their numeric frame index, e.g. t000.tif and
-    man_track000.tif. Require matching indices, consecutive frames, equal
-    shapes, and integer instance labels (0 is background).
-    The TRA masks supply detections only; man_track.txt is never loaded.
-    Dask reads one sample frame per stack to infer shape/dtype; the remaining
-    frames load lazily, one frame per chunk. Masks are validated when read.
-    """
-    if n_frames < 5:
-        raise ValueError("Use at least 5 frames for the default temporal window")
-    labels_dir = labels_dir if labels_dir is not None else root / f"{sequence}_GT" / "TRA"
-
-    def frame_files(directory: Path) -> dict[int, Path]:
-        result = {}
-        for path in sorted(directory.glob("*.tif*")):
-            match = re.search(r"(\d+)$", path.stem)
-            if match is None:
-                raise ValueError(f"TIFF name must end with a frame index: {path}")
-            index = int(match[1])
-            if index in result:
-                raise ValueError(f"Duplicate frame {index} in {directory}")
-            result[index] = path
-        if not result:
-            raise FileNotFoundError(f"No frame TIFFs in {directory}")
-        return result
-
-    image_files = frame_files(root / sequence)
-    label_files = frame_files(labels_dir)
-    indices = sorted(image_files)[:n_frames]
-    if len(indices) < 5 or indices != list(range(indices[0], indices[0] + len(indices))):
-        raise ValueError("Images must contain at least 5 consecutive frames")
-    missing = set(indices) - set(label_files)
-    if missing:
-        raise ValueError(f"Missing segmentation frames: {sorted(missing)}")
-
-    # imread uses filename order. Select matching numeric indices so even
-    # unpadded names or extra mask frames cannot silently misalign the stacks.
-    images = imread(str(root / sequence / "*.tif*"), imread=tifffile.imread)[
-        [list(image_files).index(i) for i in indices]
-    ]
-    labels = imread(str(labels_dir / "*.tif*"), imread=tifffile.imread, preprocess=_validate_masks)[
-        [list(label_files).index(i) for i in indices]
-    ]
-    if images.shape != labels.shape or labels.ndim not in (3, 4):
-        raise ValueError("Images and labels must have equal shape (T, [Z,] Y, X)")
-    return images, labels
-
-
-def _validate_masks(frame: np.ndarray) -> np.ndarray:
-    """Validate one mask frame without computing the full Dask stack."""
-    if not np.issubdtype(frame.dtype, np.integer) or np.any(frame < 0):
-        raise ValueError("Segmentations must be nonnegative integer instance labels")
-    return frame
 
 
 def sample_uncertainty(graph: td.graph.BaseGraph, n: int) -> pl.DataFrame:
@@ -462,7 +401,12 @@ def main(
     import napari
     from napari.qt.threading import WorkerBase
 
-    images, labels = load_ctc(ctc_root, sequence, labels_dir, frames)
+    # CTC frame names are zero-padded, so imread's alphabetical order is temporal.
+    labels_dir = labels_dir or ctc_root / f"{sequence}_GT" / "TRA"
+    images = imread(str(ctc_root / sequence / "*.tif"))[:frames]
+    labels = imread(str(labels_dir / "*.tif"))[:frames]
+    assert images.shape == labels.shape
+    assert images.ndim in (3, 4)  # (T, Y, X) or (T, Z, Y, X)
     graph = create_graph(labels, images=images, distance_threshold=300.0, n_neighbors=5, delta_t=3)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     session = CorrectionSession(graph, load_model(model, device=device), test_time_augs)
