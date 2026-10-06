@@ -114,7 +114,7 @@ def test_ctc_loader_matches_numeric_frames_and_rejects_missing_masks(tmp_path, m
     monkeypatch.setattr(tifffile, "imread", read)
     stack, labels = demo.load_ctc(tmp_path, n_frames=5)
     assert isinstance(stack, da.Array) and isinstance(labels, da.Array)
-    assert not reads  # Header inspection does not decode any pixel arrays.
+    assert len(reads) == 2  # Dask reads only one sample frame per stack.
     assert stack.chunks[0] == (1,) * 5
     assert stack.shape == labels.shape == (5, 16, 16)
     assert stack[:, 0, 0].compute().tolist() == list(range(5, 10))

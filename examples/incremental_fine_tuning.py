@@ -34,7 +34,7 @@ import polars as pl
 import tifffile
 import torch
 import tracksdata as td
-from dask import delayed
+from dask.array.image import imread
 
 from hoct import load_model, predict
 from hoct.correction import fit_from_labels, label_edge
@@ -60,8 +60,8 @@ def load_ctc(
     man_track000.tif. Require matching indices, consecutive frames, equal
     shapes, and integer instance labels (0 is background).
     The TRA masks supply detections only; man_track.txt is never loaded.
-    Only TIFF headers are read here; pixels load lazily, one frame per chunk.
-    Negative instance labels are rejected when each mask frame is computed.
+    Dask reads one sample frame per stack to infer shape/dtype; the remaining
+    frames load lazily, one frame per chunk. Masks are validated when read.
     """
     if n_frames < 5:
         raise ValueError("Use at least 5 frames for the default temporal window")
@@ -90,29 +90,23 @@ def load_ctc(
     if missing:
         raise ValueError(f"Missing segmentation frames: {sorted(missing)}")
 
-    def lazy_stack(files: dict[int, Path], *, masks: bool = False) -> da.Array:
-        frames = []
-        for index in indices:
-            path = files[index]
-            with tifffile.TiffFile(path) as tif:
-                shape, dtype = tif.series[0].shape, tif.series[0].dtype
-            if masks and not np.issubdtype(dtype, np.integer):
-                raise ValueError("Segmentations must be integer instance labels")
-            frames.append(da.from_delayed(delayed(_read_frame)(path, masks), shape=shape, dtype=dtype))
-        return da.stack(frames)
-
-    images = lazy_stack(image_files)
-    labels = lazy_stack(label_files, masks=True)
+    # imread uses filename order. Select matching numeric indices so even
+    # unpadded names or extra mask frames cannot silently misalign the stacks.
+    images = imread(str(root / sequence / "*.tif*"), imread=tifffile.imread)[
+        [list(image_files).index(i) for i in indices]
+    ]
+    labels = imread(str(labels_dir / "*.tif*"), imread=tifffile.imread, preprocess=_validate_masks)[
+        [list(label_files).index(i) for i in indices]
+    ]
     if images.shape != labels.shape or labels.ndim not in (3, 4):
         raise ValueError("Images and labels must have equal shape (T, [Z,] Y, X)")
     return images, labels
 
 
-def _read_frame(path: Path, masks: bool) -> np.ndarray:
-    """Read one delayed TIFF frame and validate mask values at compute time."""
-    frame = tifffile.imread(path)
-    if masks and np.any(frame < 0):
-        raise ValueError(f"Segmentations must be nonnegative: {path}")
+def _validate_masks(frame: np.ndarray) -> np.ndarray:
+    """Validate one mask frame without computing the full Dask stack."""
+    if not np.issubdtype(frame.dtype, np.integer) or np.any(frame < 0):
+        raise ValueError("Segmentations must be nonnegative integer instance labels")
     return frame
 
 

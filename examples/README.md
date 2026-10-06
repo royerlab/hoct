@@ -45,7 +45,9 @@ input example rather than a faithful segmentation benchmark. Supply your own
 complete instance masks with `--labels-dir /data/segmentation`. Every loaded
 image frame needs a matching mask frame. Sparse CTC SEG masks are unsuitable.
 Images and masks are lazy Dask arrays with one frame per chunk. The loader reads
-TIFF headers only; graph construction and Napari request pixels as needed.
+one sample frame per stack to infer shape and dtype via
+`dask.array.image.imread`; graph construction and Napari request the remaining
+pixels as needed.
 `--frames` limits graph size and processing time. Graph features and the model
 still consume memory; lazy image loading does not remove those costs.
 Frames are indexed from zero in the graph and annotation UI.
