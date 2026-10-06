@@ -1,6 +1,6 @@
 # Incremental correction and fine tuning
 
-[`incremental_fine_tuning.py`](incremental_fine_tuning.py) is a runnable,
+[`incremental_fine_tuning.py`](https://github.com/royerlab/hoct/blob/main/examples/incremental_fine_tuning.py) is a runnable,
 UI-independent starting point for the feedback loop in [HOCT, Section 4.5
 and Appendix D](https://arxiv.org/pdf/2607.11754): predict tracks, review candidate
 links, accumulate labels, fit a linear classification head on frozen edge

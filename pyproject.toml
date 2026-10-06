@@ -75,6 +75,13 @@ dev = [
 [project.scripts]
 hoct = "hoct.cli:app"
 
+[dependency-groups]
+docs = [
+    "mkdocs>=1.6,<2",
+    "mkdocs-material>=9.6,<10",
+    "mkdocstrings[python]>=0.29,<1",
+]
+
 [tool.hatch.version]
 source = "vcs"
 

@@ -3,6 +3,13 @@
 Inference and tracking for the Higher-Order Cell Tracking Transformer (HOCT)
 model with JIT-compiled models.
 
+## Documentation
+
+Read the [documentation site](https://royerlab.github.io/hoct/) for installation,
+tracking workflows, incremental correction, and the Python API reference.
+The [documentation source](docs/index.md) and
+[incremental correction guide](examples/README.md) are also available in this repository.
+
 ---
 
 ## Quick start (for biologists)
@@ -233,4 +240,8 @@ ruff check .
 
 # Format code
 ruff format .
+
+# Preview or build the documentation (no tracking dependencies needed)
+uv run --only-group docs mkdocs serve
+uv run --only-group docs mkdocs build --strict
 ```
