@@ -245,3 +245,14 @@ ruff format .
 uv run --only-group docs mkdocs serve
 uv run --only-group docs mkdocs build --strict
 ```
+
+## Citing
+
+```bib
+@article{bragantini2026higher,
+  title={Higher-Order Cell Tracking Transformer},
+  author={Bragantini, Jord{\~a}o and Theodoro, Ilan and Royer, Lo{\"\i}c A},
+  journal={arXiv preprint arXiv:2607.11754},
+  year={2026}
+}
+```
