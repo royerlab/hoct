@@ -184,14 +184,21 @@ class TrackletSolver(ILPSolver):
             else:
                 return None
 
-        ilp_solver = ILPSolver(
-            edge_weight=td.EdgeAttr("edge_weight"),  #  - td.EdgeAttr(td.DEFAULT_ATTR_KEYS.SOLUTION) * math.inf,
-            node_weight="node_weight",
-            appearance_weight="appearance_weight",
-            disappearance_weight="disappearance_weight",
-            division_weight="division_weight",
-            return_solution=False,
-        )
+        # The linkage pass is a separate ILPSolver instance. It must honor the
+        # same backend order as the first pass, so forward the preference.
+        # Older tracksdata has no `_solver_preference`; omit the kwarg then.
+        _pref = getattr(self, "_solver_preference", None)
+        ilp_kwargs = {
+            "edge_weight": td.EdgeAttr("edge_weight"),
+            "node_weight": "node_weight",
+            "appearance_weight": "appearance_weight",
+            "disappearance_weight": "disappearance_weight",
+            "division_weight": "division_weight",
+            "return_solution": False,
+        }
+        if _pref is not None:
+            ilp_kwargs["solver_preference"] = _pref
+        ilp_solver = ILPSolver(**ilp_kwargs)
         ilp_solver.solve(tracklet_graph)
         edges_df = tracklet_graph.edge_attrs()
         nodes_df = tracklet_graph.node_attrs(attr_keys=[td.DEFAULT_ATTR_KEYS.NODE_ID, "start_node_id", "end_node_id"])
