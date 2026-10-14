@@ -32,6 +32,11 @@ class ILPSolverConfig(BaseModel):
         Maximum solver time in seconds. Direct-construction default is 600.
     tracklet_solver : bool
         Enable two-pass solving: form tracklets, then link those tracklets.
+    solver_preference : str | list[str] | None
+        Backend name, or ordered list of backend names, for the ILP solver
+        (for example ``"gurobi"`` or ``["gurobi", "cuopt", "scip"]``). The name
+        is matched case-insensitively. ``None`` keeps tracksdata's default
+        order (Gurobi then SCIP). The ``"cuopt"`` backend needs ``ilpy>=0.6.0``.
 
     Examples
     --------
@@ -48,6 +53,14 @@ class ILPSolverConfig(BaseModel):
     edge_bias: float | td.attrs.Attr = Field(description="Bias added to edge weights")
     timeout: float = Field(600.0, description="Solver timeout in seconds")
     tracklet_solver: bool = Field(description="Use two-pass tracklet solver")
+    solver_preference: str | list[str] | None = Field(
+        default=None,
+        description=(
+            "ILP backend name or ordered list of names (for example 'gurobi' or "
+            "['gurobi', 'cuopt', 'scip']). None keeps tracksdata's default order. "
+            "The 'cuopt' backend needs ilpy>=0.6.0."
+        ),
+    )
 
     model_config = {
         "frozen": True,
@@ -130,6 +143,8 @@ def solve_tracking(
         "node_weight": config.node_weight,
         "timeout": config.timeout,
     }
+    if config.solver_preference is not None:
+        kwargs["solver_preference"] = config.solver_preference
     LOG.debug(
         "Solver weights configured: appearance=%.2f, disappearance=%.2f, division=%.2f, node=%.2f",
         kwargs["appearance_weight"],
