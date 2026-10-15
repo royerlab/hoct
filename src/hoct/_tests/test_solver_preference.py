@@ -4,6 +4,8 @@ These tests mock tracksdata's solver so they do not depend on the installed
 tracksdata version carrying the ``solver_preference`` parameter (PR #343).
 """
 
+import pytest
+
 import hoct.tracking._solver as solver_module
 from hoct.tracking import ILPSolverConfig, solve_tracking
 
@@ -109,3 +111,56 @@ def test_omits_solver_preference_when_none(monkeypatch):
     assert len(records) == 2
     for _name, kwargs in records:
         assert "solver_preference" not in kwargs
+
+
+def _install_pre343_solvers(monkeypatch):
+    """Replace the solvers with fakes that reject ``solver_preference``.
+
+    This models a tracksdata from before PR #343: its ``ILPSolver`` has no
+    ``solver_preference`` parameter, so passing the kwarg raises ``TypeError``.
+    """
+    records = []
+
+    def make_fake(name):
+        class _FakePre343Solver:
+            def __init__(self, **kwargs):
+                if "solver_preference" in kwargs:
+                    raise TypeError(
+                        "ILPSolver.__init__() got an unexpected keyword argument 'solver_preference'"
+                    )
+                records.append((name, kwargs))
+
+            def solve(self, graph):
+                return graph
+
+        return _FakePre343Solver
+
+    monkeypatch.setattr(solver_module.td.solvers, "ILPSolver", make_fake("ILPSolver"))
+    monkeypatch.setattr(solver_module, "TrackletSolver", make_fake("TrackletSolver"))
+    return records
+
+
+def test_default_config_constructs_on_pre343_tracksdata(monkeypatch):
+    # With the default config (no preference) solve_tracking must not pass the
+    # kwarg, so both passes construct against a tracksdata without PR #343
+    # instead of raising TypeError. This is why `_solver.py` guards the forward
+    # with `if config.solver_preference is not None` rather than always passing.
+    records = _install_pre343_solvers(monkeypatch)
+    config = ILPSolverConfig(**_base_config_kwargs(), tracklet_solver=True)
+
+    solve_tracking(graph=_FakeGraph(), config=config)
+
+    assert len(records) == 2
+    for _name, kwargs in records:
+        assert "solver_preference" not in kwargs
+
+
+def test_preference_on_pre343_tracksdata_surfaces_error(monkeypatch):
+    # Opting into a preference needs a tracksdata that supports it. On a pre-#343
+    # tracksdata the unsupported kwarg surfaces as TypeError rather than being
+    # dropped silently.
+    _install_pre343_solvers(monkeypatch)
+    config = ILPSolverConfig(**_base_config_kwargs(), tracklet_solver=False, solver_preference="cuopt")
+
+    with pytest.raises(TypeError):
+        solve_tracking(graph=_FakeGraph(), config=config)
