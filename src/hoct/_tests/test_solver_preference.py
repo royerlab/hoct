@@ -125,9 +125,7 @@ def _install_pre343_solvers(monkeypatch):
         class _FakePre343Solver:
             def __init__(self, **kwargs):
                 if "solver_preference" in kwargs:
-                    raise TypeError(
-                        "ILPSolver.__init__() got an unexpected keyword argument 'solver_preference'"
-                    )
+                    raise TypeError("ILPSolver.__init__() got an unexpected keyword argument 'solver_preference'")
                 records.append((name, kwargs))
 
             def solve(self, graph):
