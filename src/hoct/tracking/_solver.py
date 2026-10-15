@@ -143,6 +143,9 @@ def solve_tracking(
         "node_weight": config.node_weight,
         "timeout": config.timeout,
     }
+    # Forward the backend preference only when set. Older tracksdata (before the
+    # configurable `solver_preference`) has no such kwarg; omitting it keeps the
+    # default-config path working against that version.
     if config.solver_preference is not None:
         kwargs["solver_preference"] = config.solver_preference
     LOG.debug(
