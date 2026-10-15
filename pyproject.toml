@@ -81,6 +81,11 @@ docs = [
     "mkdocs>=1.6,<2",
     "mkdocs-material>=9.6,<10",
     "mkdocstrings[python]>=0.29,<1",
+    # pymdown-extensions 12 made `md` a required argument of
+    # `pymdownx.highlight.Highlight.__init__`; mkdocstrings 0.30 (latest in the
+    # range above) still calls it without `md`, so the docs build fails. Cap
+    # until a mkdocstrings release passes `md`.
+    "pymdown-extensions<12",
 ]
 
 [tool.hatch.version]
