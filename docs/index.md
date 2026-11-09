@@ -1,5 +1,8 @@
 # HOCT
 
+![HOCT logo](assets/logo-light.svg#only-light){ width="480" }
+![HOCT logo](assets/logo-dark.svg#only-dark){ width="480" }
+
 HOCT reconstructs cell trajectories and divisions from time-lapse microscopy
 images and instance segmentation masks. It scores candidate links with a
 Higher-Order Cell Tracking Transformer and selects a consistent lineage with

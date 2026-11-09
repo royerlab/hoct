@@ -1,4 +1,9 @@
-# HOCT
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/royerlab/hoct/main/docs/assets/logo-dark.svg">
+    <img alt="HOCT" src="https://raw.githubusercontent.com/royerlab/hoct/main/docs/assets/logo-light.svg" width="480">
+  </picture>
+</p>
 
 Inference and tracking for the Higher-Order Cell Tracking Transformer (HOCT)
 model with JIT-compiled models.
