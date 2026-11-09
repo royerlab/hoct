@@ -11,8 +11,20 @@ watch:
 
 theme:
   name: material
+  logo: assets/logo-dark.svg
   palette:
-    primary: teal
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: teal
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
   features:
     - navigation.sections
     - content.code.copy
@@ -39,8 +51,12 @@ plugins:
             heading_level: 3
             members: false
 
+extra_css:
+  - stylesheets/extra.css
+
 markdown_extensions:
   - admonition
+  - attr_list
   - pymdownx.highlight
   - pymdownx.superfences
   - pymdownx.snippets:
